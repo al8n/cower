@@ -197,7 +197,7 @@ Enable the optional `heapless` feature to use `Heapless<N>`. It works without
 
 ```toml
 [dependencies]
-cower = { version = "0.1.1", default-features = false, features = ["heapless"] }
+cower = { version = "0.1.2", default-features = false, features = ["heapless"] }
 ```
 
 ```rust,ignore

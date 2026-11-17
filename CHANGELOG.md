@@ -9,6 +9,8 @@ request, and `release.yml` publishes the released section as the GitHub Release 
 
 ## Unreleased
 
+## 0.1.2 (2026-11-18)
+
 - Add generic const `from_static` constructors for all policies selecting
   `CowRepr` or standard `Cow` storage, including custom and unsized policies.
   Borrowed storage needs no cloning, allocation, or inline-capacity checks.
