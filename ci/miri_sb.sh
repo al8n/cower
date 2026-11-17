@@ -3,8 +3,8 @@ set -euo pipefail
 
 # Miri under Stacked Borrows, on one target.
 #
-# This script and `ci/miri_tb.sh` are deliberate near-duplicates: they differ in `MIRIFLAGS` and in
-# nothing else, and are two files so that each workflow runs exactly one aliasing model.
+# This script and `ci/miri_tb.sh` share target setup, but keep the aliasing models separate.
+# rkyv's relative pointers require Tree Borrows, so only that lane enables rkyv.
 #
 # Usage: ci/miri_sb.sh <TARGET>
 
@@ -15,20 +15,21 @@ fi
 
 TARGET="$1"
 
-# A C compiler for the target. `cargo miri test` builds the dev-dependencies for TARGET, and a
-# build script among them (criterion's `alloca` compiles C) needs one. Miri itself links nothing.
+# A C compiler and libc headers for the target. `cargo miri test` builds the dev-dependencies
+# for TARGET, and criterion's `alloca` compiles C. Cross libc headers are only recommended by
+# the compiler packages, so install them explicitly with --no-install-recommends.
 if [ "$(uname)" = "Linux" ]; then
-  packages=""
+  packages=()
   case "$TARGET" in
-    aarch64-unknown-linux-gnu) packages="gcc-aarch64-linux-gnu" ;;
-    i686-unknown-linux-gnu) packages="gcc-multilib" ;;
-    powerpc64-unknown-linux-gnu) packages="gcc-powerpc64-linux-gnu" ;;
-    s390x-unknown-linux-gnu) packages="gcc-s390x-linux-gnu" ;;
-    riscv64gc-unknown-linux-gnu) packages="gcc-riscv64-linux-gnu" ;;
+    aarch64-unknown-linux-gnu) packages=(gcc-aarch64-linux-gnu libc6-dev-arm64-cross) ;;
+    i686-unknown-linux-gnu) packages=(gcc-multilib) ;;
+    powerpc64-unknown-linux-gnu) packages=(gcc-powerpc64-linux-gnu libc6-dev-ppc64-cross) ;;
+    s390x-unknown-linux-gnu) packages=(gcc-s390x-linux-gnu libc6-dev-s390x-cross) ;;
+    riscv64gc-unknown-linux-gnu) packages=(gcc-riscv64-linux-gnu libc6-dev-riscv64-cross) ;;
   esac
-  if [ -n "$packages" ]; then
+  if [ "${#packages[@]}" -gt 0 ]; then
     sudo apt-get update
-    sudo apt-get install -y --no-install-recommends "$packages"
+    sudo apt-get install -y --no-install-recommends "${packages[@]}"
   fi
 fi
 
@@ -38,12 +39,23 @@ cargo miri setup
 
 export MIRIFLAGS="-Zmiri-strict-provenance -Zmiri-disable-isolation -Zmiri-symbolic-alignment-check"
 
-# Two passes, the two ends of the feature range: everything on, then nothing on. The second is the
-# core tier, where code gated on `not(feature = "std")` lives and `--all-features` never compiles
-# it. Add a pass for any feature that gates `unsafe` code these two do not cover together.
+# rkyv cannot support Stacked Borrows: a reference to an archive header does not retain permission
+# to read its out-of-line contents under that model. The integration remains covered by Tree
+# Borrows, including its core-only path; do not disable aliasing checks or add pointer casts.
+# https://github.com/rkyv/rkyv/issues/436#issuecomment-1767450952
+# Derive the remaining feature list from Cargo so new integrations are covered automatically.
+features=$(cargo metadata --no-deps --format-version 1 | python3 -c '
+import json
+import sys
+
+package = next(p for p in json.load(sys.stdin)["packages"] if p["name"] == "cower")
+print(",".join(sorted(set(package["features"]) - {"rkyv", "rkyv_0_8"})))
+')
+printf 'Stacked Borrows features: %s\n' "$features"
+# The second pass covers the core tier, which enabling std/alloc does not compile.
 #
 # No `--all-targets`: it would interpret the criterion benches, which are measurement code and not
 # code under test. The default selection runs the unit tests, the integration tests and the
 # doctests, and only builds the examples.
-cargo miri test --target "$TARGET" --all-features
+cargo miri test --target "$TARGET" --features "$features"
 cargo miri test --target "$TARGET" --no-default-features

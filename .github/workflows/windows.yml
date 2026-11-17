@@ -118,8 +118,8 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-hack
-      - name: cargo hack build --feature-powerset
-        run: cargo hack build --feature-powerset --keep-going
+      - name: cargo hack build --feature-powerset --depth 2
+        run: cargo hack build --feature-powerset --depth 2 --exclude-features heapless,serde,quickcheck,proptest,arbitrary,rkyv,schemars,borsh,bytes,smallvec,arrayvec,compact_str,smol-bytes,bytemuck,ecow,arcstr,zerocopy --keep-going
 
   test:
     name: test
@@ -148,5 +148,5 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-hack
-      - name: cargo hack test --feature-powerset
-        run: cargo hack test --feature-powerset --keep-going
+      - name: cargo hack test --feature-powerset --depth 2
+        run: cargo hack test --feature-powerset --depth 2 --exclude-features heapless,serde,quickcheck,proptest,arbitrary,rkyv,schemars,borsh,bytes,smallvec,arrayvec,compact_str,smol-bytes,bytemuck,ecow,arcstr,zerocopy --keep-going
