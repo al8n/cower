@@ -9,7 +9,7 @@ fn checked_borrows_preserve_identity_and_validate_bit_patterns() {
   let value: Cow<'_, bool, StaticPolicy> = Cow::try_from_bytes(&source).unwrap();
   assert!(value.is_borrowed());
   assert!(*value.as_ref());
-  assert_eq!(value.as_bytes().as_ptr(), source.as_ptr());
+  assert_eq!(value.as_ref().as_bytes().as_ptr(), source.as_ptr());
   assert!(matches!(
     Cow::<'_, bool, StaticPolicy>::try_from_bytes(&[2]),
     Err(ConvertError::Validity(_))
@@ -33,7 +33,7 @@ fn alignment_errors_and_native_byte_order_are_preserved() {
   let source = Aligned([1, 2, 3, 4, 5, 6, 7, 8]);
   let value: Cow<'_, u32, StaticPolicy> = Cow::try_from_bytes(&source.0[..4]).unwrap();
   assert_eq!(*value.as_ref(), u32::from_ne_bytes([1, 2, 3, 4]));
-  assert_eq!(value.as_bytes(), &source.0[..4]);
+  assert_eq!(value.as_ref().as_bytes(), &source.0[..4]);
   assert!(matches!(
     Cow::<'_, u32, StaticPolicy>::try_from_bytes(&source.0[1..5]),
     Err(ConvertError::Alignment(_))
@@ -68,7 +68,7 @@ fn prefix_suffix_and_explicit_element_counts_keep_the_remainder() {
 fn explicit_counts_support_zero_sized_slice_elements() {
   let value: Cow<'_, [()], StaticPolicy> = Cow::try_from_bytes_with_elems(&[], 123).unwrap();
   assert_eq!(value.len(), 123);
-  assert!(value.as_bytes().is_empty());
+  assert!(value.as_ref().as_bytes().is_empty());
   let source = [9u8, 8];
   let (value, rest) =
     Cow::<'_, [()], StaticPolicy>::try_from_prefix_with_elems(&source, 7).unwrap();

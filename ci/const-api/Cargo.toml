@@ -1,0 +1,29 @@
+[package]
+name = "cower-const-api-check"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.85"
+publish = false
+
+# Check the downstream API without the root's higher-MSRV dev-dependencies.
+[workspace]
+
+[lib]
+path = "../../tests/const_api.rs"
+
+[dependencies]
+cower = { path = "../..", default-features = false }
+rustversion = "1"
+
+[features]
+std = ["cower/std"]
+alloc = ["cower/alloc"]
+heapless_0_9 = ["cower/heapless_0_9"]
+arrayvec_0_7 = ["cower/arrayvec_0_7"]
+smallvec_1 = ["cower/smallvec_1"]
+bytes_1 = ["cower/bytes_1"]
+compact_str_0_9 = ["cower/compact_str_0_9"]
+ecow_0_3 = ["cower/ecow_0_3"]
+arcstr_1 = ["cower/arcstr_1"]
+smol-bytes_0_2 = ["cower/smol-bytes_0_2"]
+zerocopy_0_8 = ["cower/zerocopy_0_8"]

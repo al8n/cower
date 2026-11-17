@@ -4,6 +4,7 @@ use core::{
   cmp::Ordering,
   fmt,
   hash::{Hash, Hasher},
+  marker::PhantomData,
   mem::ManuallyDrop,
   ops::{Deref, DerefMut},
 };
@@ -14,24 +15,40 @@ use core::{
 /// Deref coercion therefore accepts `&cower::Cow` where `&std::borrow::Cow` is
 /// required. Custom policies normally store [`CowRepr`] instead.
 ///
-/// This is a struct, not an enum. Use [`Self::borrowed`] / [`Self::owned`] to
-/// construct any policy, and [`Self::into_repr`] to match the two variants.
+/// This names a struct, not an enum. Use [`Cow::borrowed`] / [`Cow::owned`] to
+/// construct any policy, and [`Cow::into_repr`] to match the two variants.
 /// The default policy also supplies const `Borrowed` and `Owned` constructors.
+/// Const accessors are selected by the actual storage, including for custom policies.
+pub type Cow<'a, T, P = DefaultPolicy> = CowWithStorage<'a, T, P, <T as ToOwned<P>>::Storage<'a>>;
+
+/// The storage-explicit representation of [`Cow`].
+///
+/// Prefer [`Cow<'a, T, P>`](Cow), which selects `S` from [`ToOwned::Storage`].
+/// Keeping storage explicit lets inherent const implementations distinguish
+/// [`CowRepr`] from standard `Cow` without overlapping associated-type bounds.
+/// This type is documented so methods shared with the `Cow` alias have public
+/// documentation and working links.
 #[repr(transparent)]
 #[cfg_attr(
   feature = "zerocopy_0_8",
   derive(zerocopy_0_8::KnownLayout, zerocopy_0_8::Immutable)
 )]
 #[cfg_attr(feature = "zerocopy_0_8", zerocopy(crate = "zerocopy_0_8"))]
-pub struct Cow<'a, T: ?Sized + ToOwned<P> + 'a, P: ?Sized = DefaultPolicy> {
-  inner: T::Storage<'a>,
+pub struct CowWithStorage<'a, T: ?Sized + ToOwned<P>, P: ?Sized, S> {
+  inner: S,
+  // This zero-sized, alignment-one marker does not impose Send/Sync bounds on
+  // T or P beyond those of the actual storage, and adds no validity restrictions.
+  marker: PhantomData<fn() -> (&'a T, *const P)>,
 }
 
 impl<'a, T: ?Sized + ToOwned<P>, P: ?Sized> Cow<'a, T, P> {
   /// Wraps the policy's actual storage, including in const contexts.
   #[inline]
   pub const fn from_storage(inner: T::Storage<'a>) -> Self {
-    Self { inner }
+    Self {
+      inner,
+      marker: PhantomData,
+    }
   }
 
   /// Moves out the actual storage without cloning or allocating.
@@ -40,7 +57,7 @@ impl<'a, T: ?Sized + ToOwned<P>, P: ?Sized> Cow<'a, T, P> {
     // Rust 1.85 rejects moving generic drop types out of structs in const fns.
     let source = ManuallyDrop::new(self);
     // SAFETY: ManuallyDrop<Self> has Self's layout and validity. The pointer is
-    // aligned and refers to a live initialized wrapper. Read its only field
+    // aligned and refers to a live initialized wrapper. Read its storage field
     // exactly once, then never inspect or drop the source. No enum is cast to a
     // different type, and the returned storage retains its original type.
     unsafe {

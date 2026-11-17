@@ -85,30 +85,23 @@ where
   }
 }
 
-#[cfg_attr(docsrs, doc(cfg(feature = "zerocopy_0_8")))]
-impl<T: ?Sized + ToOwned<P> + IntoBytes + Immutable, P: ?Sized> Cow<'_, T, P> {
-  /// Views the contents as initialized bytes without copying or promoting them.
-  ///
-  /// The view describes `T`, not the Cow's pointers, variant, or owned handle.
-  /// Native layout and byte order apply; this is not a portable serialization format.
-  /// The wrapper itself does not implement raw byte-conversion traits:
-  ///
-  /// ```compile_fail
-  /// fn needs_bytes<T: zerocopy_0_8::FromBytes>() {}
-  /// needs_bytes::<cower::Cow<'static, [u8]>>();
-  /// ```
-  #[inline]
-  pub fn as_bytes(&self) -> &[u8] {
-    self.as_ref().as_bytes()
-  }
-}
-
+/// Copy-on-write mutable byte views of the contents.
+///
+/// The wrapper itself does not implement raw byte-conversion traits:
+///
+/// ```compile_fail
+/// fn needs_bytes<T: zerocopy_0_8::FromBytes>() {}
+/// needs_bytes::<cower::Cow<'static, [u8]>>();
+/// ```
 #[cfg_attr(docsrs, doc(cfg(feature = "zerocopy_0_8")))]
 impl<'a, T: ?Sized + ToOwned<P> + IntoBytes + FromBytes, P: ?Sized> Cow<'a, T, P>
 where
   T::Owned: BorrowMut<T>,
 {
   /// Promotes to owned storage before exposing writable content bytes.
+  ///
+  /// This may clone or allocate when borrowed, and shared owned storage may
+  /// detach. Subsequent access reuses exclusively owned storage.
   ///
   /// `T: FromBytes` ensures arbitrary byte edits remain valid. The original
   /// borrowed data is never mutated. Shared owned containers detach through
@@ -121,6 +114,8 @@ where
   /// value.to_mut_bytes()[0] = 0xff;
   /// ```
   #[inline]
+  // Like Cow::to_mut, this must mutate self to materialize owned storage.
+  #[allow(clippy::wrong_self_convention)]
   pub fn to_mut_bytes(&mut self) -> &mut [u8]
   where
     T::Storage<'a>: OwnedStorage<'a, T, P>,
@@ -129,6 +124,9 @@ where
   }
 
   /// Fallibly promotes to owned storage before exposing writable content bytes.
+  ///
+  /// This may clone or allocate when borrowed, and shared owned storage may
+  /// detach. Subsequent access reuses exclusively owned storage.
   ///
   /// A failed conversion preserves the original borrow and returns the policy's
   /// native error. As with [`Self::to_mut_bytes`], every byte pattern must be valid

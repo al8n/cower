@@ -35,9 +35,9 @@ use bytemuck_1::TransparentWrapper;
 ///     Cow::wrap(storage)
 /// }
 /// ```
-// SAFETY: Cow is repr(transparent) with exactly one field, T::Storage<'a>.
-// It adds neither alignment nor fields, and has no validity restrictions beyond
-// that field: from_storage accepts every valid Storage. It has no custom Drop.
+// SAFETY: Cow is repr(transparent) over T::Storage<'a>. The only other field is
+// a zero-sized, alignment-one PhantomData marker. It adds no validity restrictions:
+// from_storage accepts every valid Storage. The wrapper has no custom Drop.
 // The trait defaults preserve the exact storage type and its lifetime parameter;
 // no independently defined enums are reinterpreted. No methods are overridden.
 #[cfg_attr(docsrs, doc(cfg(feature = "bytemuck_1")))]

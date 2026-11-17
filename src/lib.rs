@@ -10,6 +10,7 @@ extern crate alloc as std;
 #[cfg(feature = "std")]
 extern crate std;
 
+mod const_api;
 mod cow;
 mod ops;
 mod policy;
@@ -72,7 +73,7 @@ mod convert;
 #[cfg(feature = "std")]
 mod std_support;
 
-pub use cow::Cow;
+pub use cow::{Cow, CowWithStorage};
 pub use policy::{DefaultPolicy, StaticPolicy, ToOwned};
 pub use storage::{CowRepr, CowStorage, OwnedStorage};
 
