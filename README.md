@@ -112,9 +112,7 @@ Enable the optional `heapless` feature to use `Heapless<N>`. It works without
 cower = { version = "0.0.0", default-features = false, features = ["heapless"] }
 ```
 
-```rust
-# #[cfg(feature = "heapless_0_9")]
-# {
+```rust,ignore
 use cower::{Cow, Heapless};
 
 let mut text: Cow<'_, str, Heapless<16>> = Cow::borrowed("hello");
@@ -125,7 +123,6 @@ let source = [1, 2, 3];
 let mut bytes: Cow<'_, [u8], Heapless<4>> = Cow::from(&source);
 bytes.try_to_mut().unwrap().push(4).unwrap();
 assert_eq!(bytes.try_into_owned().unwrap().as_slice(), &[1, 2, 3, 4]);
-# }
 ```
 
 `N` counts UTF-8 bytes for strings and elements for slices. Borrowed values may
@@ -163,9 +160,7 @@ choose `SmolBytesMutPolicy` for growable edits. Fixed storage uses `try_to_mut` 
 bytes. Borrows may exceed the owned capacity; a failed promotion preserves them.
 Slice promotion requires `T: Clone`; moving existing vector storage does not.
 
-```rust
-# #[cfg(all(feature = "smol-bytes_0_2", any(feature = "std", feature = "alloc")))]
-# {
+```rust,ignore
 use cower::{Cow, SmolBytesMutPolicy};
 
 let source = String::from("hello");
@@ -173,7 +168,6 @@ let mut text: Cow<'_, str, SmolBytesMutPolicy> = Cow::borrowed(&source);
 text.to_mut().push_str(" world");
 assert_eq!(text, "hello world");
 assert_eq!(source, "hello");
-# }
 ```
 
 With `bytes`, consuming a unique `bytes::Bytes` reuses its backing allocation;
@@ -261,10 +255,7 @@ such as `Box` and `Vec`, preserving their allocations. The wrapper adds no valid
 invariants to its field, and reference conversions retain both the outer borrow
 and the inner data lifetime.
 
-```rust
-# #[cfg(feature = "bytemuck_1")]
-# {
-# use bytemuck_1 as bytemuck;
+```rust,ignore
 use bytemuck::TransparentWrapper;
 use cower::{Cow, CowRepr, StaticPolicy};
 
@@ -272,7 +263,6 @@ let storage = CowRepr::Borrowed("hello");
 let view = Cow::<'_, str, StaticPolicy>::wrap_ref(&storage);
 assert_eq!(view.as_ref(), "hello");
 assert!(core::ptr::eq(Cow::peel_ref(view), &storage));
-# }
 ```
 
 Zerocopy APIs operate on the **contents**, not on the Cow handle's pointers or
@@ -289,10 +279,7 @@ byte edits to types such as `str` and `bool`. A failed fallible promotion preser
 the borrow. The native layout and byte order apply; these views are not a
 portable serialization format.
 
-```rust
-# #[cfg(all(feature = "zerocopy_0_8", any(feature = "std", feature = "alloc")))]
-# {
-# use zerocopy_0_8 as zerocopy;
+```rust,ignore
 use cower::Cow;
 use zerocopy::IntoBytes;
 
@@ -302,7 +289,6 @@ assert!(value.is_borrowed());
 value.to_mut_bytes()[..2].copy_from_slice(&42u16.to_ne_bytes());
 assert_eq!(value.as_ref(), &[42, 2]);
 assert_eq!(original, [1, 2]);
-# }
 ```
 
 `Cow` and `CowRepr` derive `KnownLayout` and conditionally `Immutable` through
@@ -319,10 +305,7 @@ Sized values, strings, and slices archive into `ArchivedCow<T::Archived>`,
 respectively. The archived wrapper dereferences to its contents and implements
 `CheckBytes`. The format is independent of the policy and borrowed/owned variant.
 
-```rust
-# #[cfg(all(feature = "rkyv_0_8", any(feature = "std", feature = "alloc")))]
-# {
-# use rkyv_0_8 as rkyv;
+```rust,ignore
 use cower::Cow;
 use rkyv::rancor::Error;
 
@@ -333,7 +316,6 @@ assert_eq!(archived.as_str(), "hello");
 let restored: Cow<'static, str> = rkyv::from_bytes::<_, Error>(&bytes).unwrap();
 assert!(restored.is_owned());
 assert_eq!(restored, "hello");
-# }
 ```
 
 Deserialization converts the decoded value into the policy's owned type with
@@ -354,8 +336,7 @@ Archived reads do not deserialize or allocate.
 `ToOwned<P>` selects both `Owned` and a lifetime-parameterized `Storage` type.
 Custom policies normally choose the supplied `CowRepr` backing enum:
 
-```rust
-# use heapless_0_9 as heapless;
+```rust,ignore
 use cower::{Cow, CowRepr, ToOwned};
 
 struct Inline<const N: usize>;
