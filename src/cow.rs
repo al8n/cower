@@ -31,7 +31,7 @@ pub type Cow<'a, T, P = DefaultPolicy> = CowWithStorage<'a, T, P, <T as ToOwned<
   derive(zerocopy_0_8::KnownLayout, zerocopy_0_8::Immutable)
 )]
 #[cfg_attr(feature = "zerocopy_0_8", zerocopy(crate = "zerocopy_0_8"))]
-pub struct CowWithStorage<'a, T: ?Sized + ToOwned<P> + 'a, P: ?Sized, S> {
+pub struct CowWithStorage<'a, T: ?Sized + ToOwned<P>, P: ?Sized, S> {
   inner: S,
   // This zero-sized, alignment-one marker does not impose Send/Sync bounds on
   // T or P beyond those of the actual storage, and adds no validity restrictions.

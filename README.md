@@ -98,6 +98,8 @@ assert_eq!(UTF8, b"hello");
 This keeps the borrowed variant even for `StaticPolicy` and does not check inline
 capacity. The public `Cow<'a, T, P>` alias selects an internal transparent wrapper
 whose explicit storage parameter lets Rust distinguish the const implementations.
+The alias is the same type: call these inherent methods directly on `Cow`, with
+no storage conversion or `Deref` call required.
 A completely different custom `Storage` type can use const `Cow::from_storage`;
 stable Rust cannot call its `CowStorage::borrowed` trait method in a const context.
 
@@ -109,6 +111,14 @@ Content access is also generic over the policy when its storage matches:
 | `str` | `as_bytes()` | UTF-8 `&[u8]` |
 | `[u8]` | `as_bytes()` | `&[u8]` |
 | `[T]` | `as_slice()` | `&[T]` |
+
+For the public `Cow<'a, T>` with its default policy:
+
+| Enabled features | Const content access |
+| --- | --- |
+| Neither `alloc` nor `std` | Rust 1.85+ |
+| `alloc` without `std` | Rust 1.87+ |
+| `std` (default) | Rust 1.87+ |
 
 With standard `Cow` backing, these methods are const on Rust **1.87+**, matching
 `String::as_str` and `Vec::as_slice`; on Rust 1.85/1.86 they remain ordinary
@@ -138,7 +148,7 @@ assert_eq!(VIEW, b"hello");
 ```
 
 ```rust,ignore
-// DefaultPolicy with std/alloc: Rust 1.87 or later.
+// The same public Cow API in core-only, alloc-only, and std builds on Rust 1.87+.
 use cower::Cow;
 
 static TEXT: Cow<'static, str> = Cow::<str>::from_static("hello");
