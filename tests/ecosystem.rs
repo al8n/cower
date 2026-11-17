@@ -38,6 +38,29 @@ fn bytes_promote_locally_reuse_unique_allocations_and_preserve_shared_data() {
   assert_eq!(borrowed.as_ptr(), shared.as_ptr());
 }
 
+#[cfg(feature = "bytes_1")]
+#[test]
+fn mutable_bytes_borrow_without_copying_and_move_without_reallocating() {
+  use bytes_1::{Bytes, BytesMut};
+  use cower::BytesPolicy;
+
+  let mut buffer = BytesMut::with_capacity(64);
+  buffer.extend_from_slice(b"local");
+  let pointer = buffer.as_ptr();
+  let borrowed: Cow<'_, [u8], BytesPolicy> = Cow::from(&buffer);
+  assert!(borrowed.is_borrowed());
+  assert_eq!(borrowed.as_ptr(), pointer);
+  let value: Cow<'_, [u8], BytesPolicy> = buffer.into();
+  assert!(value.is_owned());
+  assert_eq!(value.into_owned().as_ptr(), pointer);
+
+  let source = Bytes::from_static(b"static");
+  let mut value: Cow<'_, [u8], BytesPolicy> = source.clone().into();
+  value.to_mut()[0] = b'S';
+  assert_eq!(value.as_ref(), b"Static");
+  assert_eq!(source.as_ref(), b"static");
+}
+
 #[cfg(feature = "smallvec_1")]
 #[test]
 fn smallvec_clones_non_copy_elements_and_spills() {
@@ -77,6 +100,35 @@ fn arrayvec_capacity_is_fallible_and_counts_utf8_bytes() {
   assert_eq!(borrowed.as_borrowed().unwrap().as_ptr(), storage.as_ptr());
 }
 
+#[cfg(feature = "arrayvec_0_7")]
+#[test]
+fn arrayvec_container_conversions_preserve_borrows_and_move_non_clone_items() {
+  use arrayvec_0_7::{ArrayString, ArrayVec};
+  use cower::ArrayVecPolicy;
+
+  let text = ArrayString::<8>::from("你好").unwrap();
+  // A borrow can exceed the destination policy's capacity.
+  let borrowed: Cow<'_, str, ArrayVecPolicy<0>> = Cow::from(&text);
+  assert_eq!(borrowed.as_borrowed(), Some("你好"));
+  assert_eq!(borrowed.as_ptr(), text.as_ptr());
+  let mut value: Cow<'_, str, ArrayVecPolicy<8>> = text.into();
+  assert!(value.is_owned());
+  value.try_to_mut().unwrap().push('!');
+  assert_eq!(value.try_into_owned().unwrap().as_str(), "你好!");
+
+  struct NonClone(u8);
+  let mut items = ArrayVec::<NonClone, 2>::new();
+  items.push(NonClone(7));
+  let borrowed: Cow<'_, [NonClone], ArrayVecPolicy<0>> = Cow::from(&items);
+  assert!(borrowed.is_borrowed());
+  assert_eq!(borrowed.as_ptr(), items.as_ptr());
+  let value: Cow<'_, [NonClone], ArrayVecPolicy<2>> = items.into();
+  let cower::CowRepr::Owned(mut items) = value.into_repr() else {
+    panic!("moving an ArrayVec lost its owned variant");
+  };
+  assert_eq!(items.pop().unwrap().0, 7);
+}
+
 #[cfg(feature = "compact_str_0_9")]
 #[test]
 fn compact_strings_promote_and_reuse_storage() {
@@ -94,6 +146,10 @@ fn compact_strings_promote_and_reuse_storage() {
   let pointer = storage.as_ptr();
   <str as ToOwned<CompactStrPolicy>>::clone_into(&"y".repeat(64), &mut storage);
   assert_eq!(storage.as_ptr(), pointer);
+  let borrowed: Cow<'_, str, CompactStrPolicy> = Cow::from(&storage);
+  assert!(borrowed.is_borrowed());
+  assert_eq!(borrowed.as_ptr(), pointer);
+  assert_eq!(borrowed.as_ref(), "y".repeat(64));
   let value: Cow<'_, str, CompactStrPolicy> = storage.into();
   assert_eq!(value.into_owned().as_ptr(), pointer);
 }
