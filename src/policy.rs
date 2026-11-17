@@ -104,6 +104,7 @@ pub enum StaticPolicy {}
 /// by supplying its own local policy type:
 ///
 /// ```
+/// # use heapless_0_9 as heapless;
 /// use cower::{Cow, ToOwned};
 ///
 /// struct Inline<const N: usize>;

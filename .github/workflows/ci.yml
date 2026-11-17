@@ -105,9 +105,9 @@ jobs:
 
   # The library as a consumer builds it: no dev-dependencies, so no feature one of them would
   # switch on. `--feature-powerset` builds every combination of the crate's features, the empty one
-  # included. This covers all four tiers both with and without `heapless`.
-  # A crate with many features makes the powerset large:
-  # change it to `--each-feature`, or bound it with `--depth 2`.
+  # included. Pairwise coverage bounds the growing integration matrix; all-feature
+  # checks and explicit serialization combinations cover shared paths. Short aliases
+  # are excluded from powersets; the MSRV loop checks them independently.
   build:
     name: build
     strategy:
@@ -133,8 +133,8 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-hack
-      - name: cargo hack build --feature-powerset
-        run: cargo hack build --feature-powerset --keep-going
+      - name: cargo hack build --feature-powerset --depth 2
+        run: cargo hack build --feature-powerset --depth 2 --exclude-features heapless,serde,quickcheck,proptest,arbitrary,rkyv,schemars,borsh,bytes,smallvec,arrayvec,compact_str,smol-bytes,bytemuck,ecow,arcstr,zerocopy --keep-going
 
   test:
     name: test
@@ -161,12 +161,18 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-hack
-      - name: cargo hack test --feature-powerset
-        run: cargo hack test --feature-powerset --keep-going
+      - name: cargo hack test --feature-powerset --depth 2
+        run: cargo hack test --feature-powerset --depth 2 --exclude-features heapless,serde,quickcheck,proptest,arbitrary,rkyv,schemars,borsh,bytes,smallvec,arrayvec,compact_str,smol-bytes,bytemuck,ecow,arcstr,zerocopy --keep-going
       # The profile users ship. `debug_assertions` and overflow checks are what separate the two
       # profiles, and a suite that only runs in debug cannot see a divergence between them.
       - name: cargo test --release --all-features
         run: cargo test --release --all-features
+      - name: Test heapless serializers without std
+        run: |
+          cargo test --no-default-features --features heapless,serde,rkyv
+          cargo test --no-default-features --features alloc,heapless,serde,rkyv
+          cargo test --no-default-features --features bytemuck,zerocopy
+          cargo test --no-default-features --features ecow,arcstr,serde
 
   # A host build cannot show that a crate is `no_std`: `std` is linkable on the host whether or
   # not the crate reaches for it. These targets have no `std`, so a crate that links it does not
@@ -206,6 +212,20 @@ jobs:
         run: cargo build --target ${{ matrix.target }} --no-default-features --features heapless
       - name: cargo build --target ${{ matrix.target }} --no-default-features --features alloc,heapless
         run: cargo build --target ${{ matrix.target }} --no-default-features --features alloc,heapless
+      - name: Core and alloc serialization integrations
+        run: |
+          cargo build --target ${{ matrix.target }} --no-default-features --features heapless,serde,rkyv
+          cargo build --target ${{ matrix.target }} --no-default-features --features alloc,heapless,serde,rkyv
+
+      - name: Fixed storage without atomics or an allocator
+        run: cargo build --target ${{ matrix.target }} --no-default-features --features heapless,arrayvec,smol-bytes,serde,rkyv,bytemuck,zerocopy
+      - name: Allocator-based portable integrations
+        run: cargo build --target ${{ matrix.target }} --no-default-features --features alloc,borsh,smallvec
+      - name: Pointer-atomic storage integrations
+        if: matrix.target == 'thumbv7em-none-eabihf'
+        run: |
+          cargo build --target ${{ matrix.target }} --no-default-features --features alloc,schemars,bytes,compact_str,smol-bytes,ecow,arcstr,serde,rkyv,bytemuck,zerocopy
+          cargo build --target ${{ matrix.target }} --no-default-features --features alloc,bytes,smol-bytes,borsh
 
   # Every other job runs `rustup update stable`, so without this one the declared MSRV is never
   # exercised and drifts upward unnoticed. The toolchain is READ from Cargo.toml: to move the
@@ -271,6 +291,9 @@ jobs:
           cargo "+$MSRV" check --lib --no-default-features --features std
           cargo "+$MSRV" check --lib --no-default-features --features heapless
           cargo "+$MSRV" check --lib --no-default-features --features alloc,heapless
+          for feature in serde rkyv quickcheck proptest arbitrary schemars borsh bytes smallvec arrayvec compact_str smol-bytes bytemuck ecow arcstr zerocopy; do
+            cargo "+$MSRV" check --lib --no-default-features --features "$feature"
+          done
           cargo "+$MSRV" check --lib --all-features
 
   doc:
@@ -347,10 +370,12 @@ jobs:
             ${{ runner.os }}-cross-${{ matrix.target }}-
       - name: Install Rust
         run: rustup update stable --no-self-update && rustup default stable
-      - name: cargo build --all-features --target ${{ matrix.target }}
+      # Host testing/fuzzing dependencies need platform RNGs or std, and are
+      # covered by the host jobs. Cross-check portable library integrations here.
+      - name: cargo build portable integrations --target ${{ matrix.target }}
         run: |
           rustup target add ${{ matrix.target }}
-          cargo build --all-features --target ${{ matrix.target }}
+          cargo build --no-default-features --features std,alloc,heapless,serde,rkyv,schemars,borsh,bytes,smallvec,arrayvec,compact_str,smol-bytes,bytemuck,ecow,arcstr,zerocopy --target ${{ matrix.target }}
 
   # Nightly, and only here. `address` is the one sanitizer in the matrix; `ci/sanitizer.sh` says
   # why the other three are not, and how to add them.

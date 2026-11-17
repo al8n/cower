@@ -6,28 +6,126 @@ repository = "https://github.com/al8n/cower"
 documentation = "https://docs.rs/cower"
 description = "Policy-based clone-on-write pointers for no_std, with or without alloc"
 license = "MIT OR Apache-2.0"
-rust-version = "1.87"
+rust-version = "1.95"
 keywords = ["cow", "borrow", "no-std", "no-alloc"]
 categories = ["no-std", "no-std::no-alloc"]
 exclude = ["/.github/", "/ci/", "/.codecov.yml", "/deny.toml"]
 
 # The tiers. With no feature the crate is `no_std` and allocates nothing; `alloc` adds the heap
 # types and `std` the standard library, and the two are independent: `std` does not imply `alloc`.
-# All four combinations are built and tested with and without `heapless`. The optional
-# `heapless` feature enables only the dependency; its inline storage needs neither tier.
+# Integrations are opt-in and do not change the default policy's tier. QuickCheck and
+# arbitrary require std themselves; proptest requires alloc. Serde and rkyv support core.
 [features]
 default = ["std"]
-std = []
-alloc = []
-heapless = ["dep:heapless"]
+std = [
+  "serde-core_1?/std",
+  "proptest_1?/std",
+  "rkyv_0_8?/std",
+  "heapless_0_9?/alloc",
+  "schemars_1?/std",
+  "borsh_1?/std",
+  "bytes_1?/std",
+  "arrayvec_0_7?/std",
+  "compact_str_0_9?/std",
+  "smol-bytes_0_2?/std",
+  "bytemuck_1?/extern_crate_std",
+  "zerocopy_0_8?/std",
+  "ecow_0_3?/std",
+  "arcstr_1?/std",
+]
+alloc = [
+  "serde-core_1?/alloc",
+  "proptest_1?/alloc",
+  "rkyv_0_8?/alloc",
+  "heapless_0_9?/alloc",
+  "smol-bytes_0_2?/alloc",
+  "bytemuck_1?/extern_crate_alloc",
+  "zerocopy_0_8?/alloc",
+]
+heapless_0_9 = ["dep:heapless_0_9"]
+heapless = ["heapless_0_9"]
+serde_1 = [
+  "dep:serde-core_1",
+  "heapless_0_9?/serde",
+  "bytes_1?/serde",
+  "smallvec_1?/serde",
+  "arrayvec_0_7?/serde",
+  "compact_str_0_9?/serde",
+  "smol-bytes_0_2?/serde",
+  "ecow_0_3?/serde",
+  "arcstr_1?/serde",
+]
+serde = ["serde_1"]
+quickcheck_1 = ["dep:quickcheck_1", "compact_str_0_9?/quickcheck", "smol-bytes_0_2?/quickcheck"]
+quickcheck = ["quickcheck_1"]
+proptest_1 = ["dep:proptest_1", "compact_str_0_9?/proptest"]
+proptest = ["proptest_1"]
+arbitrary_1 = [
+  "dep:arbitrary_1",
+  "smallvec_1?/arbitrary",
+  "compact_str_0_9?/arbitrary",
+  "smol-bytes_0_2?/arbitrary",
+]
+arbitrary = ["arbitrary_1"]
+rkyv_0_8 = ["dep:rkyv_0_8"]
+rkyv = ["rkyv_0_8"]
+
+# Versioned features are stable entry points; short names select the current series.
+schemars_1 = ["dep:schemars_1"]
+schemars = ["schemars_1"]
+# arrayvec's Borsh implementation currently relies on the std prelude.
+borsh_1 = [
+  "dep:borsh_1",
+  "arrayvec_0_7?/borsh",
+  "arrayvec_0_7?/std",
+  "compact_str_0_9?/borsh",
+  "smol-bytes_0_2?/borsh",
+]
+borsh = ["borsh_1"]
+bytes_1 = ["dep:bytes_1", "borsh_1?/bytes"]
+bytes = ["bytes_1"]
+smallvec_1 = ["dep:smallvec_1"]
+smallvec = ["smallvec_1"]
+arrayvec_0_7 = ["dep:arrayvec_0_7"]
+arrayvec = ["arrayvec_0_7"]
+compact_str_0_9 = ["dep:compact_str_0_9"]
+compact_str = ["compact_str_0_9"]
+# Keep the fixed Buffer policy usable without alloc; std/alloc enable growable policies.
+smol-bytes_0_2 = ["dep:smol-bytes_0_2"]
+smol-bytes = ["smol-bytes_0_2"]
+bytemuck_1 = ["dep:bytemuck_1"]
+bytemuck = ["bytemuck_1"]
+ecow_0_3 = ["dep:ecow_0_3"]
+ecow = ["ecow_0_3"]
+arcstr_1 = ["dep:arcstr_1"]
+arcstr = ["arcstr_1"]
+zerocopy_0_8 = ["dep:zerocopy_0_8"]
+zerocopy = ["zerocopy_0_8"]
 
 [dependencies]
-heapless = { version = "0.9.3", optional = true, default-features = false }
+heapless_0_9 = { package = "heapless", version = "0.9.3", optional = true, default-features = false }
+serde-core_1 = { package = "serde_core", version = "1.0.228", optional = true, default-features = false }
+quickcheck_1 = { package = "quickcheck", version = "1.1", optional = true, default-features = false }
+proptest_1 = { package = "proptest", version = "1.11", optional = true, default-features = false, features = ["alloc", "no_std"] }
+arbitrary_1 = { package = "arbitrary", version = "1.4.2", optional = true, default-features = false }
+rkyv_0_8 = { package = "rkyv", version = "0.8.18", optional = true, default-features = false, features = ["bytecheck"] }
+schemars_1 = { package = "schemars", version = "1.2.3", optional = true, default-features = false }
+borsh_1 = { package = "borsh", version = "1.8.1", optional = true, default-features = false }
+bytes_1 = { package = "bytes", version = "1.12.1", optional = true, default-features = false }
+smallvec_1 = { package = "smallvec", version = "1.16.5", optional = true, default-features = false, features = ["const_generics"] }
+arrayvec_0_7 = { package = "arrayvec", version = "0.7.8", optional = true, default-features = false }
+compact_str_0_9 = { package = "compact_str", version = "0.9.1", optional = true, default-features = false }
+smol-bytes_0_2 = { package = "smol-bytes", version = "0.2", optional = true, default-features = false }
+bytemuck_1 = { package = "bytemuck", version = "1.25.2", optional = true, default-features = false }
+ecow_0_3 = { package = "ecow", version = "0.3.1", optional = true, default-features = false }
+arcstr_1 = { package = "arcstr", version = "1.2", optional = true, default-features = false, features = ["substr"] }
+zerocopy_0_8 = { package = "zerocopy", version = "0.8.63", optional = true, default-features = false, features = ["derive"] }
 
 [dev-dependencies]
 criterion = "0.8"
 # Custom-policy tests and doctests also run with the built-in integration disabled.
-heapless = { version = "0.9.3", default-features = false }
+heapless_0_9 = { package = "heapless", version = "0.9.3", default-features = false }
+serde_json = "1"
 
 [lints]
 workspace = true
@@ -42,7 +140,7 @@ bench = false
 
 [[example]]
 name = "inline"
-required-features = ["heapless"]
+required-features = ["heapless_0_9"]
 
 [[bench]]
 path = "benches/cow.rs"

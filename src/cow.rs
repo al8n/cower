@@ -18,6 +18,11 @@ use core::{
 /// construct any policy, and [`Self::into_repr`] to match the two variants.
 /// The default policy also supplies const `Borrowed` and `Owned` constructors.
 #[repr(transparent)]
+#[cfg_attr(
+  feature = "zerocopy_0_8",
+  derive(zerocopy_0_8::KnownLayout, zerocopy_0_8::Immutable)
+)]
+#[cfg_attr(feature = "zerocopy_0_8", zerocopy(crate = "zerocopy_0_8"))]
 pub struct Cow<'a, T: ?Sized + ToOwned<P> + 'a, P: ?Sized = DefaultPolicy> {
   inner: T::Storage<'a>,
 }

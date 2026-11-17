@@ -20,8 +20,8 @@ Policy-based clone-on-write storage for `no_std`, with or without `alloc`.
 `Cow<'a, T, P = DefaultPolicy>` is a transparent wrapper around the policy's
 actual backing storage. With `std` or `alloc`, the default backing is the
 standard `Cow` itself, allowing safe reference coercions without layout guesses.
-The library has no required dependencies; the optional `heapless` feature adds
-fixed-capacity inline storage.
+The library has no required dependencies. Optional features add inline and growable storage policies,
+Serde, Borsh, JSON Schema, rkyv, and property-testing/fuzzing integrations.
 
 ## Standard Cow interoperability
 
@@ -48,7 +48,7 @@ assert!(text.is_owned());
 ```
 
 `as_std`, `as_std_mut`, `into_std`, and `from_std` also work in const contexts on
-Rust 1.87. Reference access borrows the actual field; it does not reinterpret a
+Rust 1.95. Reference access borrows the actual field; it does not reinterpret a
 separate enum or construct a temporary.
 
 ```rust,ignore
@@ -113,7 +113,7 @@ cower = { version = "0.0.0", default-features = false, features = ["heapless"] }
 ```
 
 ```rust
-# #[cfg(feature = "heapless")]
+# #[cfg(feature = "heapless_0_9")]
 # {
 use cower::{Cow, Heapless};
 
@@ -135,12 +135,227 @@ requires `T: Clone`, while borrowing and moving existing owned vectors do not.
 Use `.into()` to move a `heapless::String<N>` or `heapless::Vec<T, N>` into its
 corresponding `Cow`, or `Cow::from(&container)` to borrow one.
 
+## Third-party storage
+
+All policies are uninhabited type markers. Owned container conversions move the
+existing storage; conversions from references borrow the contents under any
+compatible policy. The default policy is unchanged by these features.
+
+| Feature (short alias) | Policy | Borrowed → owned | Requirements |
+| --- | --- | --- | --- |
+| `bytes_1` (`bytes`) | `BytesPolicy` | `[u8]` → `bytes::BytesMut` | Allocator, pointer atomics |
+| `smallvec_1` (`smallvec`) | `SmallVecPolicy<N>` | `[T]` → `SmallVec<[T; N]>` | Allocator; spills beyond `N` |
+| `arrayvec_0_7` (`arrayvec`) | `ArrayVecPolicy<N>` | `str` / `[T]` → `ArrayString<N>` / `ArrayVec<T, N>` | No allocator |
+| `compact_str_0_9` (`compact_str`) | `CompactStrPolicy` | `str` → `CompactString` | Allocator; short strings inline |
+| `ecow_0_3` (`ecow`) | `EcoPolicy` | `str` / `[T]` → `EcoString` / `EcoVec<T>` | Allocator, pointer atomics; shared heap storage |
+| `ecow_0_3` (`ecow`) | `EcoBytesPolicy` | `[u8]` → `EcoBytes` | Allocator, pointer atomics; inline or shared bytes |
+| `arcstr_1` (`arcstr`) | `ArcStrPolicy` | `str` → `ArcStr` | Allocator, pointer atomics; shared immutable text |
+| `arcstr_1` (`arcstr`) | `ArcSubstrPolicy` | `str` → `Substr` | Allocator, pointer atomics; shared substring views |
+| `smol-bytes_0_2` (`smol-bytes`) | `SmolBytesBufferPolicy` | `[u8]` / `str` → `Buffer` / `Utf8Buffer` | No allocator; 62 bytes inline |
+| `smol-bytes_0_2` (`smol-bytes`) | `SmolBytesPolicy` | `[u8]` / `str` → shared `Bytes` / `Utf8Bytes` | cower `std` or `alloc`; pointer atomics |
+| `smol-bytes_0_2` (`smol-bytes`) | `SmolBytesCompactPolicy` | `[u8]` / `str` → compact `Bytes` / `Utf8Bytes` | cower `std` or `alloc`; pointer atomics |
+| `smol-bytes_0_2` (`smol-bytes`) | `SmolBytesMutPolicy` | `[u8]` / `str` → `BytesMut` / `Utf8BytesMut` | cower `std` or `alloc`; pointer atomics |
+
+Growable policies support `to_mut` / `into_owned` for local borrows. Shared and
+compact smol-bytes storage retain their immutable data APIs and cheap clones;
+choose `SmolBytesMutPolicy` for growable edits. Fixed storage uses `try_to_mut` /
+`try_into_owned`, returning native capacity errors. String capacities count UTF-8
+bytes. Borrows may exceed the owned capacity; a failed promotion preserves them.
+Slice promotion requires `T: Clone`; moving existing vector storage does not.
+
+```rust
+# #[cfg(all(feature = "smol-bytes_0_2", any(feature = "std", feature = "alloc")))]
+# {
+use cower::{Cow, SmolBytesMutPolicy};
+
+let source = String::from("hello");
+let mut text: Cow<'_, str, SmolBytesMutPolicy> = Cow::borrowed(&source);
+text.to_mut().push_str(" world");
+assert_eq!(text, "hello world");
+assert_eq!(source, "hello");
+# }
+```
+
+With `bytes`, consuming a unique `bytes::Bytes` reuses its backing allocation;
+shared or static bytes are copied into mutable storage. Moving an existing
+`BytesMut` preserves its buffer. `BytesPolicy` and `CompactStrPolicy` also reuse
+capacity in `ToOwned::clone_into`, as do the EcoString and EcoBytes policies.
+
+Ecow clones share heap storage; `EcoString` / `EcoBytes` also inline short data.
+Use the owned containers' mutation APIs (including `make_mut`) to detach shared
+storage as needed. `ArcStrPolicy` preserves static `arcstr::literal!` values and
+shared allocations; `ArcSubstrPolicy` preserves a substring's parent and range.
+Arcstr storage is immutable: `to_mut` can replace its handle, but does not expose
+mutable string bytes.
+
+## Optional integrations
+
+Each integration is enabled independently and leaves the default policy's
+storage selection unchanged. `std` and `alloc` forward capabilities to enabled
+dependencies without activating them. Each integration has a versioned feature
+and a short alias: `serde = ["serde_1"]`, `rkyv = ["rkyv_0_8"]`,
+`heapless = ["heapless_0_9"]`, and similarly for the others. Enable the versioned
+name to select a specific compatibility series. The dependency key is also
+versioned (`serde-core_1`, with `package = "serde_core"`), with optional dependencies
+and their defaults disabled. Existing short aliases remain supported.
+
+Integration features do not turn on cower's `std` or `alloc` tier implicitly.
+Some dependencies still require an allocator or `std`; the table records those
+requirements. In particular, `smol-bytes` alone keeps only the fixed buffer policy
+available, while adding cower's `alloc` or `std` exposes its growable policies.
+
+| Feature (short alias) | Support | Dependency requirements |
+| --- | --- | --- |
+| `serde_1` (`serde`) | `Serialize` / `Deserialize` through `serde_core`, without derive macros | Works without `std` or `alloc` |
+| `rkyv_0_8` (`rkyv`) | `Archive` / `Serialize` / `Deserialize`, checked zero-copy archive access | Core API works without `std` or `alloc` |
+| `quickcheck_1` (`quickcheck`) | Generate owned values and shrink owned storage | Dependency requires `std` |
+| `proptest_1` (`proptest`) | Owned strategies, parameters, and shrinking | Dependency requires `alloc`; `std` enables its standard runner facilities |
+| `arbitrary_1` (`arbitrary`) | Owned fuzz-input generation, take-rest, and recursion-guarded size hints | Dependency requires `std` |
+| `schemars_1` (`schemars`) | `JsonSchema` matches `T`, including schema IDs and optional-field behavior | Requires an allocator and pointer atomics, supports `no_std` |
+| `borsh_1` (`borsh`) | Content-only `BorshSerialize` and owned `BorshDeserialize` | Requires an allocator, supports `no_std` |
+| `bytemuck_1` (`bytemuck`) | Transparent conversions between Cow and its actual Storage | Core API needs no allocator; `std` / `alloc` enable allocated wrapper conversions |
+| `zerocopy_0_8` (`zerocopy`) | Checked content views, byte access, derived `KnownLayout` / conditional `Immutable` | Core API needs no allocator; derive macros run on the host |
+
+Serde serializes `T`'s contents with no policy or variant tag. Like standard
+`Cow`, deserialization creates `Owned`, requiring `T::Owned: Deserialize<'de>`.
+Enabling both `heapless` and `serde` also enables the container implementations;
+oversized input returns a deserialization error. Static-reference storage still
+requires static input and cannot extend the lifetime of local input. Serde's
+special derive handling for standard `Cow` does not make this wrapper borrow
+automatically when annotated with `#[serde(borrow)]`.
+
+Borsh follows the same content-only / owned-decoding model, without a variant
+or policy tag. Owned deserialization requires `T::Owned: BorshDeserialize`.
+Combined features enable native implementations for `arrayvec`, `bytes`,
+`compact_str`, and `smol-bytes`. `heapless`, `smallvec`, `ecow`, and `arcstr`
+support Borsh serialization through their borrowed contents, but their owned
+containers do not supply Borsh deserialization.
+
+Schemars forwards to the borrowed type, without requiring schema traits on the
+policy or owned storage. It does not add a capacity limit to the schema, since
+borrowed values may exceed that capacity. Deserializers still enforce limits.
+
+Serde forwards to all enabled storage integrations. Generator support is
+forwarded where upstream implements it: QuickCheck for `compact_str` and
+`smol-bytes`; proptest for `compact_str`; arbitrary for `smallvec`, `compact_str`,
+and `smol-bytes`. Upstream `compact_str` enables `std` with its Borsh and proptest
+features. Arrayvec 0.7's Borsh implementation also needs its `std` prelude,
+which this integration enables for that combination. These combinations are not
+bare-metal configurations; base ArrayVec storage and Serde remain core-compatible.
+
+The three generation integrations require their respective `Arbitrary` trait on
+`T::Owned`. They do not require framework traits on the policy itself. QuickCheck
+also requires cloneable backing and produces `Cow<'static, T, P>`; manually
+constructed borrowed values have no shrink candidates. Proptest forwards the
+owned type's `Parameters` and strategy. `heapless` 0.9 does not implement these
+generator traits on its containers; use an explicit bounded strategy mapped to
+`Cow::owned` for `Heapless<N>`.
+
+### bytemuck and zerocopy
+
+`Cow<'a, T, P>` implements `bytemuck::TransparentWrapper<T::Storage<'a>>`.
+`wrap` / `peel`, reference conversions, and slice conversions preserve the exact
+backing storage without cloning. With `std` or `alloc`, the upstream
+`TransparentWrapperAlloc` blanket implementation additionally supports containers
+such as `Box` and `Vec`, preserving their allocations. The wrapper adds no validity
+invariants to its field, and reference conversions retain both the outer borrow
+and the inner data lifetime.
+
+```rust
+# #[cfg(feature = "bytemuck_1")]
+# {
+# use bytemuck_1 as bytemuck;
+use bytemuck::TransparentWrapper;
+use cower::{Cow, CowRepr, StaticPolicy};
+
+let storage = CowRepr::Borrowed("hello");
+let view = Cow::<'_, str, StaticPolicy>::wrap_ref(&storage);
+assert_eq!(view.as_ref(), "hello");
+assert!(core::ptr::eq(Cow::peel_ref(view), &storage));
+# }
+```
+
+Zerocopy APIs operate on the **contents**, not on the Cow handle's pointers or
+variant. `try_from_bytes`, `try_from_prefix`, and `try_from_suffix` check size,
+alignment, and validity, then construct a borrowed Cow tied to the input's
+lifetime. Their `_with_elems` counterparts accept an explicit trailing-element
+count for slice DSTs, including zero-sized elements. Original zerocopy errors
+are returned unchanged. Owned conversion is not required for borrowing.
+
+`as_bytes` borrows initialized bytes when `T: IntoBytes + Immutable`.
+`to_mut_bytes` / `try_to_mut_bytes` first promote to owned storage and require
+`T: IntoBytes + FromBytes` and `Owned: BorrowMut<T>`. This prevents unrestricted
+byte edits to types such as `str` and `bool`. A failed fallible promotion preserves
+the borrow. The native layout and byte order apply; these views are not a
+portable serialization format.
+
+```rust
+# #[cfg(all(feature = "zerocopy_0_8", any(feature = "std", feature = "alloc")))]
+# {
+# use zerocopy_0_8 as zerocopy;
+use cower::Cow;
+use zerocopy::IntoBytes;
+
+let original = [1u16, 2];
+let mut value: Cow<'_, [u16]> = Cow::try_from_bytes(original.as_bytes()).unwrap();
+assert!(value.is_borrowed());
+value.to_mut_bytes()[..2].copy_from_slice(&42u16.to_ne_bytes());
+assert_eq!(value.as_ref(), &[42, 2]);
+assert_eq!(original, [1, 2]);
+# }
+```
+
+`Cow` and `CowRepr` derive `KnownLayout` and conditionally `Immutable` through
+zerocopy's official macros, using actual field bounds rather than bounds on the
+policy marker. `KnownLayout` does not promise a stable wire layout. The Cow
+handle itself receives no `Pod`, `Zeroable`, `FromBytes`, or `IntoBytes`
+implementation: content traits do not establish the validity of a handle's
+pointers, discriminant, or unused bytes.
+
+### rkyv archives
+
+Sized values, strings, and slices archive into `ArchivedCow<T::Archived>`,
+`ArchivedCow<ArchivedString>`, and `ArchivedCow<ArchivedVec<T::Archived>>`
+respectively. The archived wrapper dereferences to its contents and implements
+`CheckBytes`. The format is independent of the policy and borrowed/owned variant.
+
+```rust
+# #[cfg(all(feature = "rkyv_0_8", any(feature = "std", feature = "alloc")))]
+# {
+# use rkyv_0_8 as rkyv;
+use cower::Cow;
+use rkyv::rancor::Error;
+
+let value: Cow<'_, str> = Cow::borrowed("hello");
+let bytes = rkyv::to_bytes::<Error>(&value).unwrap();
+let archived = rkyv::access::<rkyv::Archived<Cow<'_, str>>, Error>(&bytes).unwrap();
+assert_eq!(archived.as_str(), "hello");
+let restored: Cow<'static, str> = rkyv::from_bytes::<_, Error>(&bytes).unwrap();
+assert!(restored.is_owned());
+assert_eq!(restored, "hello");
+# }
+```
+
+Deserialization converts the decoded value into the policy's owned type with
+`TryFrom`, returning errors such as insufficient `Heapless<N>` capacity. String
+conversion accepts any `&str`, so it cannot manufacture static references.
+With `std`/`alloc`, slice deserialization uses a temporary `Vec<T>`; without
+either feature, `Heapless<N>` slices deserialize directly into inline storage.
+Other policies deserialize when their owned types implement the required
+`TryFrom`: strings need conversion from `&str`, slices from `Vec<T>` in the
+heap tiers. For example, `ArrayVec` slices lack the latter conversion and support
+archiving/reading but not owned rkyv deserialization. Without cower's `std` or
+`alloc`, direct inline slice deserialization is provided only for `Heapless<N>`.
+The `rkyv::api::low` API supports stack-backed output and scratch buffers.
+Archived reads do not deserialize or allocate.
+
 ## Custom policies
 
 `ToOwned<P>` selects both `Owned` and a lifetime-parameterized `Storage` type.
 Custom policies normally choose the supplied `CowRepr` backing enum:
 
 ```rust
+# use heapless_0_9 as heapless;
 use cower::{Cow, CowRepr, ToOwned};
 
 struct Inline<const N: usize>;
@@ -221,19 +436,22 @@ identity: by-value arguments need `.into()`, generic trait bounds do not apply
 implicit coercions, and `Deref::Target` is the backing type rather than `T`.
 Use `as_ref()` for `&T`. Generic policy inference may require a type annotation.
 The wrapper's `is_borrowed` / `is_owned` methods are runtime methods; standard
-nightly-only APIs are not part of the Rust 1.87 compatibility target.
+nightly-only APIs are not part of the Rust 1.95 compatibility target.
 
 ## Safety and features
 
 No independent `repr(Rust)` enums are cast to each other. Reference access and
-deref use ordinary field borrows. The one internal unsafe operation implements
+deref use ordinary field borrows. The internal unsafe move implements
 const `into_storage` on Rust 1.85: it uses `ManuallyDrop` and reads the initialized
 field exactly once, preserving its exact type and preventing double-drop. Its
-safety argument does not depend on standard `Cow`'s enum layout.
+safety argument does not depend on standard `Cow`'s enum layout. The optional
+bytemuck integration adds one audited `unsafe impl` of `TransparentWrapper`,
+justified by the single field and `repr(transparent)`. Zerocopy uses upstream
+safe APIs and official derives; byte access always refers to the contents.
 
 The default feature is `std`. `std` and `alloc` are independent; either enables
-default heap backing. Disable both for a core-only build. The library MSRV is
-Rust 1.87, including the optional `heapless` 0.9.3 dependency. Tests cover feature
+default heap backing. Disable both and any integrations requiring heap/std for
+a core-only build. The library MSRV is Rust 1.95, matching `smol-bytes` 0.2. Tests cover feature
 configurations, capacity errors, static lifetime failures, const
 values/references, direct reference coercions, allocation identity, and drops.
 
@@ -242,6 +460,8 @@ cargo test
 cargo test --no-default-features
 cargo test --no-default-features --features alloc
 cargo test --no-default-features --features heapless
+cargo test --no-default-features --features heapless,serde,rkyv
+cargo test --no-default-features --features bytemuck,zerocopy
 cargo test --all-features
 cargo run --example inline --no-default-features --features heapless
 ```

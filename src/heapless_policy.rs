@@ -44,7 +44,7 @@ use crate::{Cow, CowRepr, ToOwned};
 /// ```compile_fail
 /// let policy: cower::Heapless<16> = Default::default();
 /// ```
-#[cfg_attr(docsrs, doc(cfg(feature = "heapless")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "heapless_0_9")))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Heapless<const N: usize> {}
 

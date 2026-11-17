@@ -12,6 +12,11 @@ use crate::{DefaultPolicy, ToOwned};
 ///
 /// [`crate::Cow`] is a transparent wrapper. Call its `into_repr` method to match
 /// these variants, or select this enum as a custom policy's `Storage` type.
+#[cfg_attr(
+  feature = "zerocopy_0_8",
+  derive(zerocopy_0_8::KnownLayout, zerocopy_0_8::Immutable)
+)]
+#[cfg_attr(feature = "zerocopy_0_8", zerocopy(crate = "zerocopy_0_8"))]
 pub enum CowRepr<'a, T: ?Sized + ToOwned<P>, P: ?Sized = DefaultPolicy> {
   /// A borrowed value; it need not be `'static`.
   Borrowed(&'a T),

@@ -1,3 +1,5 @@
+use heapless_0_9 as heapless;
+
 use core::{borrow::Borrow, cmp::Ordering, hash::Hash};
 use std::{collections::hash_map::DefaultHasher, hash::Hasher};
 

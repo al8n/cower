@@ -1,5 +1,7 @@
 #![cfg(any(feature = "std", feature = "alloc"))]
 
+use heapless_0_9 as heapless;
+
 use cower::{Cow, CowRepr, StaticPolicy, ToOwned};
 use std::{borrow::Cow as StdCow, cell::Cell, rc::Rc};
 

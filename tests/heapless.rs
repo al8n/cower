@@ -1,4 +1,6 @@
-#![cfg(feature = "heapless")]
+#![cfg(feature = "heapless_0_9")]
+
+use heapless_0_9 as heapless;
 
 use core::cell::Cell;
 
