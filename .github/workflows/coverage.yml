@@ -78,8 +78,23 @@ jobs:
           tool: cargo-llvm-cov
       # No `--tests` next to `--doctests`: cargo-llvm-cov refuses the pair. `--doctests` alone runs
       # the default set (unit tests and `tests/`) as well as the doctests.
-      - name: cargo llvm-cov --all-features --doctests
-        run: cargo llvm-cov --all-features --doctests --lcov --output-path lcov.info
+      # `--no-report` retains profiles across configurations. Clean first so a restored cache
+      # cannot contribute stale coverage. All-features alone misses the core-only branches.
+      - name: Reset coverage profiles
+        run: cargo llvm-cov clean --workspace
+      - name: Cover core without integrations
+        run: cargo llvm-cov --no-report --doctests --no-default-features
+      - name: Cover core integrations
+        run: cargo llvm-cov --no-report --doctests --no-default-features --features heapless,arrayvec,smol-bytes,serde,rkyv,bytemuck,zerocopy
+      - name: Cover alloc integrations without std
+        run: cargo llvm-cov --no-report --doctests --no-default-features --features alloc,heapless,arrayvec,smol-bytes,serde,rkyv,bytemuck,zerocopy,bytes,smallvec,compact_str,ecow,arcstr,schemars,borsh
+      - name: Cover all features
+        run: cargo llvm-cov --no-report --doctests --all-features
+      - name: Merge coverage reports
+        run: |
+          cargo llvm-cov report --doctests --lcov --output-path lcov.info
+          cargo llvm-cov report --doctests --html
+          cargo llvm-cov report --doctests | tee coverage-summary.txt
       - name: A report was actually written
         run: |
           if [ ! -s lcov.info ]; then
@@ -87,6 +102,23 @@ jobs:
             exit 1
           fi
           echo "ok: lcov.info is $(wc -c < lcov.info) bytes"
+      - name: Retain coverage reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            lcov.info
+            coverage-summary.txt
+            target/llvm-cov/html/
+          if-no-files-found: error
+      - name: Add coverage to the job summary
+        run: |
+          {
+            echo '### Coverage across core, alloc, and std'
+            echo '```text'
+            cat coverage-summary.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload to codecov.io
         if: env.CODECOV_TOKEN != ''
         uses: codecov/codecov-action@v7
@@ -98,5 +130,5 @@ jobs:
       - name: Say so when the upload could not happen
         if: env.CODECOV_TOKEN == ''
         run: |
-          echo "::warning::CODECOV_TOKEN is not set, so the report above was measured and then discarded."
+          echo "::warning::CODECOV_TOKEN is not set; reports are available in the coverage-report artifact."
           echo "::warning::Add it under Settings > Secrets and variables > Actions to publish coverage."

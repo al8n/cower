@@ -9,6 +9,12 @@ request, and `release.yml` publishes the released section as the GitHub Release 
 
 ## Unreleased
 
+## 0.1.0 (2026-11-17)
+
+- Expand regression coverage for `CowRepr` ownership transitions and fallible conversions,
+  symmetric comparisons, native OS strings, and third-party container conversions.
+- Merge coverage from core, alloc, and std configurations, including doctests, and retain
+  coverage reports as CI artifacts independently of Codecov uploads.
 - Add optional bytemuck 1 transparent value, reference, slice, and allocated
   container conversions to the exact backing storage, with lifetime/drop checks.
 - Add ecow 0.3 shared string/vector/byte policies and arcstr 1 shared string and
