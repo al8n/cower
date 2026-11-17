@@ -455,6 +455,13 @@ a core-only build. The library MSRV is Rust 1.95, matching `smol-bytes` 0.2. Tes
 configurations, capacity errors, static lifetime failures, const
 values/references, direct reference coercions, allocation identity, and drops.
 
+Miri CI checks all features under Tree Borrows, plus the bare core build and
+core-only `heapless,rkyv` integration. Stacked Borrows checks all features except
+`rkyv` / `rkyv_0_8`, plus the bare core build: rkyv's relative pointers rely on
+the aliasing behavior supported by Tree Borrows, as described in
+[the upstream explanation](https://github.com/rkyv/rkyv/issues/436#issuecomment-1767450952).
+Both lanes retain strict provenance and aliasing checks.
+
 ```sh
 cargo test
 cargo test --no-default-features

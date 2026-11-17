@@ -6,6 +6,8 @@ name: Miri (Stacked Borrows)
 # wall clock, so it is not part of the merge gate, and each model is its own workflow because the
 # two report different findings and are paused, and read, on their own. Read `miri-tb.yml` for why
 # no apple target is in the matrix, and why there is no `schedule` and no `-Dwarnings`.
+# All integrations except rkyv run here; rkyv's relative pointers require Tree Borrows and are
+# covered by `miri-tb.yml`, including the core-only heapless deserialization path.
 #
 # Pause it (Actions > Miri (Stacked Borrows) > ... > Disable workflow) while you work, and turn it
 # back on before a release: `release.yml` requires both Miri workflows to be green on the commit
