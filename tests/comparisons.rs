@@ -1,9 +1,9 @@
 use cower::{Cow, StaticPolicy};
 
-fn equality<L: ?Sized, R: ?Sized>(left: &L, right: &R, expected: bool)
+fn equality<L, R>(left: &L, right: &R, expected: bool)
 where
-  L: PartialEq<R>,
-  R: PartialEq<L>,
+  L: ?Sized + PartialEq<R>,
+  R: ?Sized + PartialEq<L>,
 {
   assert_eq!(left.eq(right), expected);
   assert_eq!(right.eq(left), expected);
@@ -30,7 +30,7 @@ fn string_and_c_string_equality_is_symmetric() {
 
 #[test]
 fn slice_comparisons_accept_shared_mutable_and_owned_containers() {
-  let value: Cow<'_, [u8], StaticPolicy> = Cow::owned(&[1, 2]);
+  let value = Cow::<'_, [u8], StaticPolicy>::owned(&[1, 2]);
   for mut other in [[1u8, 2], [1, 3]] {
     let expected = other == [1, 2];
     equality(&value, &other.as_slice(), expected);
@@ -65,10 +65,10 @@ fn path_and_os_string_comparisons_match_native_semantics() {
   use core::cmp::Ordering;
   use std::{ffi::OsStr, path::Path};
 
-  fn ordered<L: ?Sized, R: ?Sized>(left: &L, right: &R, expected: Ordering)
+  fn ordered<L, R>(left: &L, right: &R, expected: Ordering)
   where
-    L: PartialOrd<R>,
-    R: PartialOrd<L>,
+    L: ?Sized + PartialOrd<R>,
+    R: ?Sized + PartialOrd<L>,
   {
     equality(left, right, expected == Ordering::Equal);
     assert_eq!(left.partial_cmp(right), Some(expected));
