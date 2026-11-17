@@ -10,6 +10,7 @@ extern crate alloc as std;
 #[cfg(feature = "std")]
 extern crate std;
 
+mod const_api;
 mod cow;
 mod ops;
 mod policy;

@@ -106,6 +106,8 @@ zerocopy_0_8 = ["dep:zerocopy_0_8"]
 zerocopy = ["zerocopy_0_8"]
 
 [dependencies]
+# Compile-time only: keep the base MSRV while exposing newly const standard APIs.
+rustversion = "1"
 heapless_0_9 = { package = "heapless", version = "0.9", optional = true, default-features = false }
 serde-core_1 = { package = "serde_core", version = "1", optional = true, default-features = false }
 quickcheck_1 = { package = "quickcheck", version = "1", optional = true, default-features = false }

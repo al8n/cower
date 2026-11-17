@@ -287,6 +287,7 @@ jobs:
         run: |
           rustup update stable --no-self-update
           cargo +stable generate-lockfile
+          cargo +stable generate-lockfile --manifest-path ci/const-api/Cargo.toml
       - name: Install Rust ${{ steps.msrv.outputs.version }}
         run: rustup toolchain install "$MSRV" --profile minimal --no-self-update
       # Exit 0 from the checks below is not proof that the floor was exercised if the toolchain
@@ -330,6 +331,26 @@ jobs:
           if [ "$MSRV_GROUP" = all ]; then
             cargo "+$MSRV" check --lib --all-features
           fi
+      - name: Check downstream const API, each tier
+        env:
+          MSRV_GROUP: ${{ matrix.group }}
+          CARGO_TARGET_DIR: target/const-api
+        run: |
+          features="arrayvec_0_7,smallvec_1,bytes_1,compact_str_0_9,ecow_0_3,arcstr_1"
+          case "$MSRV_GROUP" in
+            base) ;;
+            heapless) features="$features,heapless_0_9" ;;
+            all) features="$features,heapless_0_9,smol-bytes_0_2" ;;
+            *) echo "::error::unknown MSRV group: $MSRV_GROUP"; exit 1 ;;
+          esac
+          for tier in core alloc std; do
+            args=(--manifest-path ci/const-api/Cargo.toml --lib --no-default-features)
+            if [ "$tier" != core ]; then
+              args+=(--features "$tier")
+            fi
+            cargo "+$MSRV" check "${args[@]}" --locked
+            cargo "+$MSRV" check "${args[@]}" --features "$features" --locked
+          done
 
   doc:
     name: doc

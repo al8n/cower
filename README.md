@@ -20,7 +20,8 @@ Policy-based clone-on-write storage for `no_std`, with or without `alloc`.
 `Cow<'a, T, P = DefaultPolicy>` is a transparent wrapper around the policy's
 actual backing storage. With `std` or `alloc`, the default backing is the
 standard `Cow` itself, allowing safe reference coercions without layout guesses.
-The library has no required dependencies. Optional features add inline and growable storage policies,
+The library has no required runtime dependencies; `rustversion` selects const APIs at compile time.
+Optional features add inline and growable storage policies,
 Serde, Borsh, JSON Schema, rkyv, and property-testing/fuzzing integrations.
 
 ## Standard Cow interoperability
@@ -70,6 +71,53 @@ enough. Custom policies may explicitly select standard backing to opt in.
 Policies using `CowRepr` or fixed-capacity storage can use `borrow_std()` for a
 borrowed standard value instead. Value conversions through `From` also work when
 the owned types match, regardless of the backing enum.
+
+## Const construction and string access
+
+`from_static` constructs a borrowed `Cow` from `&'static T` without cloning or
+allocating. It is const on Rust 1.85 for every built-in policy supported by that
+compiler (optional integrations retain their own MSRVs). Specify the borrowed
+type and, if needed, the policy to select the constructor:
+
+```rust
+use cower::{Cow, StaticPolicy};
+
+const TEXT: Cow<'static, str> = Cow::<str>::from_static("hello");
+const BYTES: Cow<'static, [u8]> = Cow::<[u8]>::from_static(b"hello");
+static STATIC: Cow<'static, str, StaticPolicy> =
+    Cow::<str, StaticPolicy>::from_static("hello");
+const VIEW: &str = STATIC.as_str();
+const UTF8: &[u8] = STATIC.as_bytes();
+assert!(TEXT.is_borrowed());
+assert_eq!(BYTES.as_ref(), b"hello");
+assert_eq!(VIEW, "hello");
+assert_eq!(UTF8, b"hello");
+```
+
+This keeps the borrowed variant even for `StaticPolicy` and does not check inline
+capacity. Stable const functions cannot dispatch through `CowStorage::borrowed`,
+so `from_static` has separate implementations for built-in policies. For a custom
+policy, use the existing const `Cow::from_storage` with its concrete backing type.
+
+The inherent `as_str()` and `as_bytes()` avoid non-const `Deref` calls. With
+`DefaultPolicy` and `std` or `alloc`, they are const on Rust **1.87+**, matching
+`String::as_str`; on Rust 1.85/1.86 they remain ordinary methods. With
+`StaticPolicy`, or core-only `DefaultPolicy`, both borrowed and owned string
+access are const on Rust **1.85**.
+This does not add const string access to third-party storage policies. The result
+borrows `self`, so it cannot outlive an owned string.
+
+```rust,ignore
+// DefaultPolicy with std/alloc: Rust 1.87 or later.
+use cower::Cow;
+
+static TEXT: Cow<'static, str> = Cow::<str>::from_static("hello");
+const VIEW: &str = TEXT.as_str();
+const UTF8: &[u8] = TEXT.as_bytes();
+const fn view<'s>(value: &'s Cow<'_, str>) -> &'s str { value.as_str() }
+assert_eq!(view(&TEXT), VIEW);
+assert_eq!(UTF8, b"hello");
+```
 
 ## Policies
 
