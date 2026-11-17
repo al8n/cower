@@ -1,11 +1,18 @@
-//! Const operations that need to know the policy's concrete backing type.
+//! Const operations selected by concrete storage, independently of policy names.
 
-#[cfg(not(any(feature = "std", feature = "alloc")))]
-use crate::DefaultPolicy;
-use crate::{Cow, CowRepr, StaticPolicy, ToOwned};
+use crate::{CowRepr, ToOwned, cow::CowWithStorage};
 
 #[cfg(any(feature = "std", feature = "alloc"))]
-impl<T: ?Sized + std::borrow::ToOwned + 'static> Cow<'static, T> {
+impl<T, P: ?Sized> CowWithStorage<'static, T, P, std::borrow::Cow<'static, T>>
+where
+  T: ?Sized
+    + std::borrow::ToOwned
+    + ToOwned<
+      P,
+      Owned = <T as std::borrow::ToOwned>::Owned,
+      Storage<'static> = std::borrow::Cow<'static, T>,
+    > + 'static,
+{
   /// Borrows a static value without cloning or allocating, including in consts.
   ///
   /// Specify the borrowed type (and policy, if needed) to select the constructor:
@@ -27,63 +34,40 @@ impl<T: ?Sized + std::borrow::ToOwned + 'static> Cow<'static, T> {
   /// ```
   #[inline]
   pub const fn from_static(value: &'static T) -> Self {
-    Self::Borrowed(value)
+    Self::from_storage(std::borrow::Cow::Borrowed(value))
   }
 }
 
-// Stable Rust cannot call CowStorage::borrowed from a const fn. Implement the
-// constructor for concrete policies instead of assuming custom storage layouts.
-macro_rules! repr_from_static {
-  ($policy:ty $(, const $capacity:ident: $size:ty)?) => {
-    impl<T: ?Sized + 'static $(, const $capacity: $size)?> Cow<'static, T, $policy>
-    where
-      T: ToOwned<$policy, Storage<'static> = CowRepr<'static, T, $policy>>,
-    {
-      /// Borrows a static value without cloning or allocating, including in consts.
-      ///
-      /// Specify the borrowed type and policy, for example
-      /// `Cow::<str, StaticPolicy>::from_static("hello")`. The result is borrowed,
-      /// even when the policy uses static references as its owned representation.
-      #[inline]
-      pub const fn from_static(value: &'static T) -> Self {
-        Self::from_storage(CowRepr::Borrowed(value))
-      }
-    }
-  };
+impl<T, P: ?Sized> CowWithStorage<'static, T, P, CowRepr<'static, T, P>>
+where
+  T: ?Sized + ToOwned<P, Storage<'static> = CowRepr<'static, T, P>> + 'static,
+{
+  /// Borrows a static value without cloning or allocating, including in consts.
+  ///
+  /// Works with every policy selecting `CowRepr`, including custom and unsized
+  /// policies. No conversion to the owned representation is required.
+  ///
+  /// ```
+  /// use cower::{Cow, CowRepr, ToOwned};
+  /// struct Custom;
+  /// impl ToOwned<Custom> for str {
+  ///     type Owned = &'static str;
+  ///     type Storage<'a> = CowRepr<'a, str, Custom>;
+  /// }
+  /// const VALUE: Cow<'static, str, Custom> = Cow::<str, Custom>::from_static("hello");
+  /// assert!(VALUE.is_borrowed());
+  /// ```
+  #[inline]
+  pub const fn from_static(value: &'static T) -> Self {
+    Self::from_storage(CowRepr::Borrowed(value))
+  }
 }
 
-#[cfg(not(any(feature = "std", feature = "alloc")))]
-repr_from_static!(DefaultPolicy);
-repr_from_static!(StaticPolicy);
-#[cfg(feature = "heapless_0_9")]
-repr_from_static!(crate::Heapless<N>, const N: usize);
-#[cfg(feature = "arrayvec_0_7")]
-repr_from_static!(crate::ArrayVecPolicy<N>, const N: usize);
-#[cfg(feature = "smallvec_1")]
-repr_from_static!(crate::SmallVecPolicy<N>, const N: usize);
-#[cfg(feature = "bytes_1")]
-repr_from_static!(crate::BytesPolicy);
-#[cfg(feature = "compact_str_0_9")]
-repr_from_static!(crate::CompactStrPolicy);
-#[cfg(feature = "ecow_0_3")]
-repr_from_static!(crate::EcoPolicy);
-#[cfg(feature = "ecow_0_3")]
-repr_from_static!(crate::EcoBytesPolicy);
-#[cfg(feature = "arcstr_1")]
-repr_from_static!(crate::ArcStrPolicy);
-#[cfg(feature = "arcstr_1")]
-repr_from_static!(crate::ArcSubstrPolicy);
-#[cfg(feature = "smol-bytes_0_2")]
-repr_from_static!(crate::SmolBytesBufferPolicy);
-#[cfg(all(feature = "smol-bytes_0_2", any(feature = "std", feature = "alloc")))]
-repr_from_static!(crate::SmolBytesPolicy);
-#[cfg(all(feature = "smol-bytes_0_2", any(feature = "std", feature = "alloc")))]
-repr_from_static!(crate::SmolBytesCompactPolicy);
-#[cfg(all(feature = "smol-bytes_0_2", any(feature = "std", feature = "alloc")))]
-repr_from_static!(crate::SmolBytesMutPolicy);
-
 #[cfg(any(feature = "std", feature = "alloc"))]
-impl Cow<'_, str> {
+impl<'a, P: ?Sized> CowWithStorage<'a, str, P, std::borrow::Cow<'a, str>>
+where
+  str: ToOwned<P, Owned = std::string::String, Storage<'a> = std::borrow::Cow<'a, str>>,
+{
   /// Borrows the string contents without cloning or allocating.
   ///
   /// Const on Rust 1.87 and later, when `String::as_str` became const. On Rust
@@ -130,32 +114,102 @@ impl Cow<'_, str> {
   }
 }
 
-macro_rules! static_string_accessors {
-  ($policy:ty) => {
-    impl Cow<'_, str, $policy> {
-      /// Borrows the string contents without copying, including in consts.
-      ///
-      /// Both borrowed and owned static-reference storage support const access
-      /// on Rust 1.85. The returned reference is tied to the borrow of `self`.
-      #[inline]
-      pub const fn as_str(&self) -> &str {
-        match self.as_storage() {
-          CowRepr::Borrowed(value) | CowRepr::Owned(value) => value,
-        }
-      }
-
-      /// Borrows the string's UTF-8 bytes without copying, including in consts.
-      ///
-      /// Const on Rust 1.85 for both borrowed and owned static-reference storage.
-      /// The returned slice is tied to the borrow of `self`.
-      #[inline]
-      pub const fn as_bytes(&self) -> &[u8] {
-        self.as_str().as_bytes()
-      }
+impl<'a, P: ?Sized> CowWithStorage<'a, str, P, CowRepr<'a, str, P>>
+where
+  str: ToOwned<P, Owned = &'static str, Storage<'a> = CowRepr<'a, str, P>>,
+{
+  /// Borrows the string contents without copying, including in consts.
+  ///
+  /// Const on Rust 1.85 for any policy using `CowRepr` with static-reference
+  /// owned storage, including core-only `DefaultPolicy` and custom policies.
+  /// The returned reference is tied to the borrow of `self`.
+  #[inline]
+  pub const fn as_str(&self) -> &str {
+    match self.as_storage() {
+      CowRepr::Borrowed(value) | CowRepr::Owned(value) => value,
     }
-  };
+  }
+
+  /// Borrows the string's UTF-8 bytes without copying, including in consts.
+  ///
+  /// Const on Rust 1.85 for both borrowed and owned static-reference storage.
+  /// The returned slice is tied to the borrow of `self`.
+  #[inline]
+  pub const fn as_bytes(&self) -> &[u8] {
+    self.as_str().as_bytes()
+  }
 }
 
-#[cfg(not(any(feature = "std", feature = "alloc")))]
-static_string_accessors!(DefaultPolicy);
-static_string_accessors!(StaticPolicy);
+#[cfg(any(feature = "std", feature = "alloc"))]
+impl<'a, T: Clone, P: ?Sized> CowWithStorage<'a, [T], P, std::borrow::Cow<'a, [T]>>
+where
+  [T]: ToOwned<P, Owned = std::vec::Vec<T>, Storage<'a> = std::borrow::Cow<'a, [T]>>,
+{
+  /// Borrows the elements without cloning or allocating.
+  ///
+  /// Const on Rust 1.87 and later, matching `Vec::as_slice`. On Rust 1.85/1.86
+  /// this remains an ordinary method. The result borrows `self`.
+  ///
+  /// ```compile_fail
+  /// use cower::Cow;
+  /// let slice;
+  /// {
+  ///     let value: Cow<'static, [u8]> = Cow::Owned(vec![1, 2]);
+  ///     slice = value.as_slice();
+  /// }
+  /// assert_eq!(slice, &[1, 2]);
+  /// ```
+  #[rustversion::attr(since(1.87), const)]
+  #[inline]
+  pub fn as_slice(&self) -> &[T] {
+    match self.as_storage() {
+      std::borrow::Cow::Borrowed(value) => value,
+      std::borrow::Cow::Owned(value) => value.as_slice(),
+    }
+  }
+}
+
+impl<'a, T: 'static, P: ?Sized> CowWithStorage<'a, [T], P, CowRepr<'a, [T], P>>
+where
+  [T]: ToOwned<P, Owned = &'static [T], Storage<'a> = CowRepr<'a, [T], P>>,
+{
+  /// Borrows the elements without copying, including in consts on Rust 1.85.
+  ///
+  /// Works with any static-reference policy and does not require `T: Clone`.
+  /// The result is tied to the borrow of `self`.
+  #[inline]
+  pub const fn as_slice(&self) -> &[T] {
+    match self.as_storage() {
+      CowRepr::Borrowed(value) | CowRepr::Owned(value) => value,
+    }
+  }
+}
+
+#[cfg(any(feature = "std", feature = "alloc"))]
+impl<'a, P: ?Sized> CowWithStorage<'a, [u8], P, std::borrow::Cow<'a, [u8]>>
+where
+  [u8]: ToOwned<P, Owned = std::vec::Vec<u8>, Storage<'a> = std::borrow::Cow<'a, [u8]>>,
+{
+  /// Borrows the bytes, including in consts on Rust 1.87 and later.
+  ///
+  /// Equivalent to [`Self::as_slice`], without copying. On Rust 1.85/1.86 this
+  /// remains an ordinary method. The result borrows `self`.
+  #[rustversion::attr(since(1.87), const)]
+  #[inline]
+  pub fn as_bytes(&self) -> &[u8] {
+    self.as_slice()
+  }
+}
+
+impl<'a, P: ?Sized> CowWithStorage<'a, [u8], P, CowRepr<'a, [u8], P>>
+where
+  [u8]: ToOwned<P, Owned = &'static [u8], Storage<'a> = CowRepr<'a, [u8], P>>,
+{
+  /// Borrows the bytes without copying, including in consts on Rust 1.85.
+  ///
+  /// Equivalent to [`Self::as_slice`]; the result borrows `self`.
+  #[inline]
+  pub const fn as_bytes(&self) -> &[u8] {
+    self.as_slice()
+  }
+}

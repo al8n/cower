@@ -7,6 +7,9 @@ extern crate alloc;
 
 use cower::{Cow, CowRepr, StaticPolicy};
 
+#[path = "support/const_policies.rs"]
+mod policies;
+
 pub static DEFAULT: Cow<'static, str> = Cow::<str>::from_static("hé🦀");
 pub static STATIC_BORROWED: Cow<'static, str, StaticPolicy> =
   Cow::<str, StaticPolicy>::from_static("hé🦀");

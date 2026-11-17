@@ -9,13 +9,21 @@ request, and `release.yml` publishes the released section as the GitHub Release 
 
 ## Unreleased
 
-- Add const `from_static` constructors for every built-in policy, preserving
-  borrowed storage without cloning, allocation, or inline-capacity checks.
-- Add inherent string access for `DefaultPolicy` and `StaticPolicy`. `as_str`
-  and `as_bytes` are const on Rust 1.87+ for default heap storage, and on Rust
-  1.85 for static reference storage; the base MSRV remains 1.85.
-- Check const construction and string access in downstream core, alloc, and std
-  fixtures on each MSRV lane, alongside lifetime and allocation regression tests.
+- Add generic const `from_static` constructors for all policies selecting
+  `CowRepr` or standard `Cow` storage, including custom and unsized policies.
+  Borrowed storage needs no cloning, allocation, or inline-capacity checks.
+- Keep `Cow<'a, T, P>` as the public type while selecting const implementations
+  through an internal transparent wrapper with an explicit storage parameter.
+- Add `as_str` / UTF-8 `as_bytes` for strings, `as_bytes` for `[u8]`, and
+  `as_slice` for `[T]`. These support custom policies using standard storage or
+  static-reference `CowRepr` storage. Heap access is const on Rust 1.87+;
+  static-reference access is const on Rust 1.85, without a `Clone` bound.
+- **Breaking (zerocopy):** remove the generic raw `Cow::as_bytes` forwarding
+  method. Import `zerocopy::IntoBytes` and use `value.as_ref().as_bytes()` instead.
+  Const string/byte accessors remain available independently of zerocopy.
+- Check generic policy construction and string/slice access in downstream core,
+  alloc, and std fixtures on each MSRV lane, alongside lifetime, layout, and
+  allocation regression tests. The base MSRV remains 1.85.
 
 ## 0.1.1 (2026-11-17)
 

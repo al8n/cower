@@ -72,12 +72,13 @@ Policies using `CowRepr` or fixed-capacity storage can use `borrow_std()` for a
 borrowed standard value instead. Value conversions through `From` also work when
 the owned types match, regardless of the backing enum.
 
-## Const construction and string access
+## Const construction and content access
 
 `from_static` constructs a borrowed `Cow` from `&'static T` without cloning or
-allocating. It is const on Rust 1.85 for every built-in policy supported by that
-compiler (optional integrations retain their own MSRVs). Specify the borrowed
-type and, if needed, the policy to select the constructor:
+allocating. It is generic over `P: ?Sized` for both `CowRepr` and standard `Cow`
+backing, including custom policies. It is const on Rust 1.85; optional
+integrations retain their own MSRVs. Specify the borrowed type and, if needed,
+the policy to select the constructor:
 
 ```rust
 use cower::{Cow, StaticPolicy};
@@ -95,17 +96,46 @@ assert_eq!(UTF8, b"hello");
 ```
 
 This keeps the borrowed variant even for `StaticPolicy` and does not check inline
-capacity. Stable const functions cannot dispatch through `CowStorage::borrowed`,
-so `from_static` has separate implementations for built-in policies. For a custom
-policy, use the existing const `Cow::from_storage` with its concrete backing type.
+capacity. The public `Cow<'a, T, P>` alias selects an internal transparent wrapper
+whose explicit storage parameter lets Rust distinguish the const implementations.
+A completely different custom `Storage` type can use const `Cow::from_storage`;
+stable Rust cannot call its `CowStorage::borrowed` trait method in a const context.
 
-The inherent `as_str()` and `as_bytes()` avoid non-const `Deref` calls. With
-`DefaultPolicy` and `std` or `alloc`, they are const on Rust **1.87+**, matching
-`String::as_str`; on Rust 1.85/1.86 they remain ordinary methods. With
-`StaticPolicy`, or core-only `DefaultPolicy`, both borrowed and owned string
-access are const on Rust **1.85**.
-This does not add const string access to third-party storage policies. The result
-borrows `self`, so it cannot outlive an owned string.
+Content access is also generic over the policy when its storage matches:
+
+| Borrowed type | Method | Result |
+| --- | --- | --- |
+| `str` | `as_str()` | `&str` |
+| `str` | `as_bytes()` | UTF-8 `&[u8]` |
+| `[u8]` | `as_bytes()` | `&[u8]` |
+| `[T]` | `as_slice()` | `&[T]` |
+
+With standard `Cow` backing, these methods are const on Rust **1.87+**, matching
+`String::as_str` and `Vec::as_slice`; on Rust 1.85/1.86 they remain ordinary
+methods. With `CowRepr` backing and static-reference owned storage, they are const
+on Rust **1.85**, including core-only `DefaultPolicy`, `StaticPolicy`, and custom
+policies. Static-reference slice access does not require `T: Clone`. Other owned
+containers do not automatically gain const accessors. Every returned reference
+borrows `self` and cannot outlive owned storage.
+
+```rust
+// Custom policy: works without std or alloc, on Rust 1.85.
+use cower::{Cow, CowRepr, ToOwned};
+
+struct Custom;
+impl<T: 'static> ToOwned<Custom> for [T] {
+    type Owned = &'static [T];
+    type Storage<'a> = CowRepr<'a, [T], Custom>;
+}
+static NUMBERS: Cow<'static, [u16], Custom> =
+    Cow::<[u16], Custom>::from_static(&[256, 513]);
+static BYTES: Cow<'static, [u8], Custom> =
+    Cow::<[u8], Custom>::from_static(b"hello");
+const SLICE: &[u16] = NUMBERS.as_slice();
+const VIEW: &[u8] = BYTES.as_bytes();
+assert_eq!(SLICE, &[256, 513]);
+assert_eq!(VIEW, b"hello");
+```
 
 ```rust,ignore
 // DefaultPolicy with std/alloc: Rust 1.87 or later.
@@ -320,12 +350,17 @@ lifetime. Their `_with_elems` counterparts accept an explicit trailing-element
 count for slice DSTs, including zero-sized elements. Original zerocopy errors
 are returned unchanged. Owned conversion is not required for borrowing.
 
-`as_bytes` borrows initialized bytes when `T: IntoBytes + Immutable`.
+For a generic raw content view, import `zerocopy::IntoBytes` and use
+`value.as_ref().as_bytes()` when `T: IntoBytes + Immutable`. There is no separate
+Cow-specific forwarding method. This replaces the generic `Cow::as_bytes`
+provided by the zerocopy integration in 0.1.1; the inherent const accessors
+for strings and byte slices remain available independently of zerocopy.
 `to_mut_bytes` / `try_to_mut_bytes` first promote to owned storage and require
 `T: IntoBytes + FromBytes` and `Owned: BorrowMut<T>`. This prevents unrestricted
 byte edits to types such as `str` and `bool`. A failed fallible promotion preserves
-the borrow. The native layout and byte order apply; these views are not a
-portable serialization format.
+the borrow. Mutable access may clone or allocate, including detaching shared
+storage; exclusively owned storage is reused. The native layout and byte order
+apply; these views are not a portable serialization format.
 
 ```rust,ignore
 use cower::Cow;
@@ -334,6 +369,7 @@ use zerocopy::IntoBytes;
 let original = [1u16, 2];
 let mut value: Cow<'_, [u16]> = Cow::try_from_bytes(original.as_bytes()).unwrap();
 assert!(value.is_borrowed());
+assert_eq!(value.as_ref().as_bytes(), original.as_bytes());
 value.to_mut_bytes()[..2].copy_from_slice(&42u16.to_ne_bytes());
 assert_eq!(value.as_ref(), &[42, 2]);
 assert_eq!(original, [1, 2]);

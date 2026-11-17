@@ -336,7 +336,7 @@ jobs:
           MSRV_GROUP: ${{ matrix.group }}
           CARGO_TARGET_DIR: target/const-api
         run: |
-          features="arrayvec_0_7,smallvec_1,bytes_1,compact_str_0_9,ecow_0_3,arcstr_1"
+          features="arrayvec_0_7,smallvec_1,bytes_1,compact_str_0_9,ecow_0_3,arcstr_1,zerocopy_0_8"
           case "$MSRV_GROUP" in
             base) ;;
             heapless) features="$features,heapless_0_9" ;;
