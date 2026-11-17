@@ -15,7 +15,8 @@ request, and `release.yml` publishes the released section as the GitHub Release 
   `CowRepr` or standard `Cow` storage, including custom and unsized policies.
   Borrowed storage needs no cloning, allocation, or inline-capacity checks.
 - Keep `Cow<'a, T, P>` as the public type while selecting const implementations
-  through an internal transparent wrapper with an explicit storage parameter.
+  through a transparent wrapper with an explicit storage parameter. Document
+  that backing type so the alias's method links remain publicly accessible.
 - Add `as_str` / UTF-8 `as_bytes` for strings, `as_bytes` for `[u8]`, and
   `as_slice` for `[T]`. These support custom policies using standard storage or
   static-reference `CowRepr` storage. Heap access is const on Rust 1.87+;

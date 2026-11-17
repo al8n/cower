@@ -134,9 +134,14 @@ const _: () = {
 macro_rules! check_policy {
   ($policy:ty, $borrowed:ty, $value:expr) => {
     const _: () = {
-      static VALUE: Cow<'static, $borrowed, $policy> =
-        Cow::<$borrowed, $policy>::from_static($value);
-      assert!(VALUE.as_storage().is_borrowed());
+      // Some owned representations contain interior mutability, so reading a
+      // static Cow of that type is forbidden during const evaluation, even
+      // when its active variant is Borrowed. Evaluate a local value instead.
+      let value: Cow<'static, $borrowed, $policy> = Cow::<$borrowed, $policy>::from_static($value);
+      assert!(value.as_storage().is_borrowed());
+      // Generic owned storage may have a non-const destructor. This value is
+      // borrowed, so suppressing its drop does not leak owned storage.
+      let _ = core::mem::ManuallyDrop::new(value);
     };
   };
 }

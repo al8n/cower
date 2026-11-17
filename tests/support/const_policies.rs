@@ -76,9 +76,11 @@ const _: () = {
 static TEXT: Cow<'static, str, Custom> = from_static::<str, Custom>("hé🦀");
 static OWNED_TEXT: Cow<'static, str, Custom> = Cow::from_storage(CowRepr::Owned("owned"));
 static BYTES: Cow<'static, [u8], Custom> = from_static::<[u8], Custom>(b"bytes");
-static OWNED_BYTES: Cow<'static, [u8], Custom> = Cow::from_storage(CowRepr::Owned(b"owned"));
+static OWNED_BYTES: Cow<'static, [u8], Custom> =
+  Cow::from_storage(CowRepr::<[u8], Custom>::Owned(b"owned"));
 static ITEMS: Cow<'static, [Item], Custom> = from_static::<[Item], Custom>(&[Item(256), Item(513)]);
-static OWNED_ITEMS: Cow<'static, [Item], Custom> = Cow::from_storage(CowRepr::Owned(&[Item(1024)]));
+static OWNED_ITEMS: Cow<'static, [Item], Custom> =
+  Cow::from_storage(CowRepr::<[Item], Custom>::Owned(&[Item(1024)]));
 static EMPTY: Cow<'static, [Item], Custom> = from_static::<[Item], Custom>(&[]);
 static ZST: Cow<'static, [()], Custom> = from_static::<[()], Custom>(&[(), (), ()]);
 
@@ -106,8 +108,8 @@ const _: () = {
 #[cfg(not(any(feature = "std", feature = "alloc")))]
 const _: () = {
   static DEFAULT: Cow<'static, [Item]> = Cow::<[Item]>::from_static(&[Item(256)]);
-  static OWNED: Cow<'static, [Item]> = Cow::Owned(&[Item(513)]);
-  static OWNED_BYTES: Cow<'static, [u8]> = Cow::Owned(b"owned");
+  static OWNED: Cow<'static, [Item]> = Cow::<[Item]>::Owned(&[Item(513)]);
+  static OWNED_BYTES: Cow<'static, [u8]> = Cow::<[u8]>::Owned(b"owned");
   const VIEW: &[Item] = DEFAULT.as_slice();
   const OWNED_VIEW: &[Item] = OWNED.as_slice();
   const BYTES: &[u8] = super::DEFAULT_BYTES.as_bytes();
@@ -223,10 +225,10 @@ mod heap {
   static ITEMS: Cow<'static, [u16], CustomHeap> = from_static::<[u16], CustomHeap>(&[256, 513]);
 
   // Also check ordinary method availability on the 1.85/1.86 fixture lanes.
-  const _: fn(&Cow<'static, str, CustomHeap>) -> &str = text::<CustomHeap>;
-  const _: fn(&Cow<'static, str, CustomHeap>) -> &[u8] = utf8::<CustomHeap>;
-  const _: fn(&Cow<'static, [u8], CustomHeap>) -> &[u8] = bytes::<CustomHeap>;
-  const _: fn(&Cow<'static, [u16], CustomHeap>) -> &[u16] = slice::<u16, CustomHeap>;
+  const _: for<'s> fn(&'s Cow<'static, str, CustomHeap>) -> &'s str = text::<CustomHeap>;
+  const _: for<'s> fn(&'s Cow<'static, str, CustomHeap>) -> &'s [u8] = utf8::<CustomHeap>;
+  const _: for<'s> fn(&'s Cow<'static, [u8], CustomHeap>) -> &'s [u8] = bytes::<CustomHeap>;
+  const _: for<'s> fn(&'s Cow<'static, [u16], CustomHeap>) -> &'s [u16] = slice::<u16, CustomHeap>;
   const _: &Cow<'static, str, CustomHeap> = &TEXT;
   const _: &Cow<'static, [u8], CustomHeap> = &BYTES;
   const _: &Cow<'static, [u16], CustomHeap> = &ITEMS;

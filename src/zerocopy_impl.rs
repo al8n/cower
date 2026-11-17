@@ -114,6 +114,8 @@ where
   /// value.to_mut_bytes()[0] = 0xff;
   /// ```
   #[inline]
+  // Like Cow::to_mut, this must mutate self to materialize owned storage.
+  #[allow(clippy::wrong_self_convention)]
   pub fn to_mut_bytes(&mut self) -> &mut [u8]
   where
     T::Storage<'a>: OwnedStorage<'a, T, P>,

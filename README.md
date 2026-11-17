@@ -96,10 +96,12 @@ assert_eq!(UTF8, b"hello");
 ```
 
 This keeps the borrowed variant even for `StaticPolicy` and does not check inline
-capacity. The public `Cow<'a, T, P>` alias selects an internal transparent wrapper
+capacity. The public `Cow<'a, T, P>` alias selects a transparent wrapper
 whose explicit storage parameter lets Rust distinguish the const implementations.
 The alias is the same type: call these inherent methods directly on `Cow`, with
 no storage conversion or `Deref` call required.
+The backing `CowWithStorage` type is also documented so the alias's methods and
+their links remain visible in rustdoc; callers normally use `Cow`.
 A completely different custom `Storage` type can use const `Cow::from_storage`;
 stable Rust cannot call its `CowStorage::borrowed` trait method in a const context.
 

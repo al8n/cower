@@ -21,10 +21,13 @@ use core::{
 /// Const accessors are selected by the actual storage, including for custom policies.
 pub type Cow<'a, T, P = DefaultPolicy> = CowWithStorage<'a, T, P, <T as ToOwned<P>>::Storage<'a>>;
 
-// Keeping storage explicit lets inherent const implementations distinguish
-// CowRepr from standard Cow without overlapping associated-type predicates.
-// The public alias fixes S to the policy's storage; users still specify T and P.
-#[doc(hidden)]
+/// The storage-explicit representation of [`Cow`].
+///
+/// Prefer [`Cow<'a, T, P>`](Cow), which selects `S` from [`ToOwned::Storage`].
+/// Keeping storage explicit lets inherent const implementations distinguish
+/// [`CowRepr`] from standard `Cow` without overlapping associated-type bounds.
+/// This type is documented so methods shared with the `Cow` alias have public
+/// documentation and working links.
 #[repr(transparent)]
 #[cfg_attr(
   feature = "zerocopy_0_8",
