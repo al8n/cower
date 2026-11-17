@@ -9,6 +9,14 @@ request, and `release.yml` publishes the released section as the GitHub Release 
 
 ## Unreleased
 
+## 0.1.1 (2026-11-17)
+
+- Lower the base MSRV to Rust 1.85, including core-only, alloc, std, and const
+  standard `Cow` conversions. Optional heapless 0.9 and smol-bytes 0.2 integrations
+  require Rust 1.87 and 1.95 respectively.
+- Check the base and optional integration MSRVs separately in CI across core,
+  alloc, and std configurations, including combinations of compatible integrations.
+
 ## 0.1.0 (2026-11-17)
 
 - Expand regression coverage for `CowRepr` ownership transitions and fallible conversions,

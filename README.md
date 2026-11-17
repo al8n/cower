@@ -48,7 +48,7 @@ assert!(text.is_owned());
 ```
 
 `as_std`, `as_std_mut`, `into_std`, and `from_std` also work in const contexts on
-Rust 1.95. Reference access borrows the actual field; it does not reinterpret a
+Rust 1.85. Reference access borrows the actual field; it does not reinterpret a
 separate enum or construct a temporary.
 
 ```rust,ignore
@@ -109,7 +109,7 @@ Enable the optional `heapless` feature to use `Heapless<N>`. It works without
 
 ```toml
 [dependencies]
-cower = { version = "0.1.0", default-features = false, features = ["heapless"] }
+cower = { version = "0.1.1", default-features = false, features = ["heapless"] }
 ```
 
 ```rust,ignore
@@ -417,7 +417,7 @@ identity: by-value arguments need `.into()`, generic trait bounds do not apply
 implicit coercions, and `Deref::Target` is the backing type rather than `T`.
 Use `as_ref()` for `&T`. Generic policy inference may require a type annotation.
 The wrapper's `is_borrowed` / `is_owned` methods are runtime methods; standard
-nightly-only APIs are not part of the Rust 1.95 compatibility target.
+nightly-only APIs are not part of the Rust 1.85 compatibility target.
 
 ## Safety and features
 
@@ -432,8 +432,22 @@ safe APIs and official derives; byte access always refers to the contents.
 
 The default feature is `std`. `std` and `alloc` are independent; either enables
 default heap backing. Disable both and any integrations requiring heap/std for
-a core-only build. The library MSRV is Rust 1.95, matching `smol-bytes` 0.2. Tests cover feature
-configurations, capacity errors, static lifetime failures, const
+a core-only build. The base library MSRV is Rust 1.85, including const conversions
+to and reference access to standard `Cow`. Optional integrations can require a
+newer compiler:
+
+| Features | Minimum Rust version |
+| --- | --- |
+| Core-only, `alloc`, `std`, and integrations not listed below | 1.85 |
+| `heapless` / `heapless_0_9` | 1.87 |
+| `smol-bytes` / `smol-bytes_0_2` | 1.95 |
+| `--all-features` | 1.95 |
+
+Feature combinations require the highest applicable version. CI checks the library
+at these floors across core, alloc, and std configurations. Development dependencies
+may require newer Rust; tests and benchmarks run on stable Rust.
+
+Tests cover feature configurations, capacity errors, static lifetime failures, const
 values/references, direct reference coercions, allocation identity, and drops.
 
 Miri CI checks all features under Tree Borrows, plus the bare core build and

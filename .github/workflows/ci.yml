@@ -228,22 +228,41 @@ jobs:
           cargo build --target ${{ matrix.target }} --no-default-features --features alloc,bytes,smol-bytes,borsh
 
   # Every other job runs `rustup update stable`, so without this one the declared MSRV is never
-  # exercised and drifts upward unnoticed. The toolchain is READ from Cargo.toml: to move the
-  # floor, edit `rust-version` and nothing else. Edition 2024 cannot go below 1.85.
+  # exercised and drifts upward unnoticed. Read the base floor from Cargo.toml; optional
+  # integrations with higher floors get separate lanes. Keep these in sync with the README.
+  # Edition 2024 cannot go below 1.85. Keep the base check named `msrv` for branch protection.
   msrv:
-    name: msrv
+    name: ${{ matrix.name }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: msrv
+            group: base
+            rust: ""
+          - name: msrv (heapless)
+            group: heapless
+            rust: "1.87"
+          - name: msrv (all-features)
+            group: all
+            rust: "1.95"
     steps:
       - uses: actions/checkout@v7
-      - name: Read declared MSRV from Cargo.toml
+      - name: Select the base or integration MSRV
         id: msrv
+        env:
+          INTEGRATION_MSRV: ${{ matrix.rust }}
         run: |
-          version=$( { grep -m1 '^rust-version' Cargo.toml || true; } | sed -E 's/^rust-version *= *"([^"]+)".*/\1/')
+          version="$INTEGRATION_MSRV"
+          if [ -z "$version" ]; then
+            version=$( { grep -m1 '^rust-version' Cargo.toml || true; } | sed -E 's/^rust-version *= *"([^"]+)".*/\1/')
+          fi
           if ! [[ "$version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
             echo "::error::could not read a rust-version such as \"1.85\" from Cargo.toml (got '$version')"
             exit 1
           fi
-          echo "Declared MSRV: $version"
+          echo "Checking MSRV: $version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "MSRV=$version" >> "$GITHUB_ENV"
       - name: Cache cargo build and registry
@@ -253,12 +272,13 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-msrv-${{ hashFiles('**/Cargo.toml') }}
+          key: ${{ runner.os }}-msrv-${{ matrix.group }}-${{ steps.msrv.outputs.version }}-${{ hashFiles('**/Cargo.toml') }}
           restore-keys: |
-            ${{ runner.os }}-msrv-
+            ${{ runner.os }}-msrv-${{ matrix.group }}-${{ steps.msrv.outputs.version }}-
       # The lockfile is not committed. The current cargo resolves it, with the MSRV-aware resolver,
-      # so that dependency choice does not rest on the floor's own cargo and picks releases the
-      # floor can build, dev-dependencies included. Edition 2024 resolves that way by default
+      # so dependency resolution prefers releases compatible with the base floor. Dependencies
+      # without a compatible release are checked only in their higher-floor lanes; dev-dependencies
+      # are not built. Edition 2024 resolves that way by default
       # (resolver 3); the variable keeps it true if the crate goes back to edition 2021. The
       # lockfile it writes is version 4 for this floor, which cargo 1.85 reads.
       - name: Resolve dependencies for the declared MSRV
@@ -282,19 +302,34 @@ jobs:
               exit 1
               ;;
           esac
-      # `--lib` because the floor is a promise to consumers, who never build dev-dependencies. The
-      # last line covers every feature a crate adds later.
+      # `--lib` because the floor is a promise to consumers, who never build dev-dependencies.
+      # Check each integration and their combination in each tier; all-features stays at 1.95.
       - name: cargo +${{ steps.msrv.outputs.version }} check --lib, each tier
+        env:
+          MSRV_GROUP: ${{ matrix.group }}
         run: |
-          cargo "+$MSRV" check --lib --no-default-features
-          cargo "+$MSRV" check --lib --no-default-features --features alloc
-          cargo "+$MSRV" check --lib --no-default-features --features std
-          cargo "+$MSRV" check --lib --no-default-features --features heapless
-          cargo "+$MSRV" check --lib --no-default-features --features alloc,heapless
-          for feature in serde rkyv quickcheck proptest arbitrary schemars borsh bytes smallvec arrayvec compact_str smol-bytes bytemuck ecow arcstr zerocopy; do
-            cargo "+$MSRV" check --lib --no-default-features --features "$feature"
+          base_features="serde rkyv quickcheck proptest arbitrary schemars borsh bytes smallvec arrayvec compact_str bytemuck ecow arcstr zerocopy"
+          case "$MSRV_GROUP" in
+            base) features="$base_features" ;;
+            heapless) features="heapless" ;;
+            all) features="$base_features heapless smol-bytes" ;;
+            *) echo "::error::unknown MSRV group: $MSRV_GROUP"; exit 1 ;;
+          esac
+          combined=$(echo "$features" | tr ' ' ',')
+          for tier in core alloc std; do
+            args=(--lib --no-default-features)
+            if [ "$tier" != core ]; then
+              args+=(--features "$tier")
+            fi
+            cargo "+$MSRV" check "${args[@]}"
+            for feature in $features; do
+              cargo "+$MSRV" check "${args[@]}" --features "$feature"
+            done
+            cargo "+$MSRV" check "${args[@]}" --features "$combined"
           done
-          cargo "+$MSRV" check --lib --all-features
+          if [ "$MSRV_GROUP" = all ]; then
+            cargo "+$MSRV" check --lib --all-features
+          fi
 
   doc:
     name: doc
