@@ -65,8 +65,8 @@ jobs:
       - name: cargo +stable fmt --all -- --check
         run: cargo +stable fmt --all -- --check
 
-  # Every feature alone, plus none and all. With today's tiers that is `no features`, `alloc`, `std`
-  # and `std + alloc`. `--tests` lints test code as well; examples and benches have no feature
+  # Every feature alone, plus none and all, including the optional `heapless` integration.
+  # `--tests` lints test code as well; examples and benches have no feature
   # matrix of their own and are linted once, with everything on, by the second step.
   #
   # The single-entry `os` matrix keeps the check named `clippy (ubuntu-latest)`, as it was while
@@ -105,8 +105,8 @@ jobs:
 
   # The library as a consumer builds it: no dev-dependencies, so no feature one of them would
   # switch on. `--feature-powerset` builds every combination of the crate's features, the empty one
-  # included. With today's tiers that is `no features`, `alloc`, `std` and `std + alloc`, the four
-  # builds the house tier rules ask for. A crate with many features makes the powerset large:
+  # included. This covers all four tiers both with and without `heapless`.
+  # A crate with many features makes the powerset large:
   # change it to `--each-feature`, or bound it with `--depth 2`.
   build:
     name: build
@@ -202,6 +202,10 @@ jobs:
         run: cargo build --target ${{ matrix.target }} --no-default-features
       - name: cargo build --target ${{ matrix.target }} --no-default-features --features alloc
         run: cargo build --target ${{ matrix.target }} --no-default-features --features alloc
+      - name: cargo build --target ${{ matrix.target }} --no-default-features --features heapless
+        run: cargo build --target ${{ matrix.target }} --no-default-features --features heapless
+      - name: cargo build --target ${{ matrix.target }} --no-default-features --features alloc,heapless
+        run: cargo build --target ${{ matrix.target }} --no-default-features --features alloc,heapless
 
   # Every other job runs `rustup update stable`, so without this one the declared MSRV is never
   # exercised and drifts upward unnoticed. The toolchain is READ from Cargo.toml: to move the
@@ -265,6 +269,8 @@ jobs:
           cargo "+$MSRV" check --lib --no-default-features
           cargo "+$MSRV" check --lib --no-default-features --features alloc
           cargo "+$MSRV" check --lib --no-default-features --features std
+          cargo "+$MSRV" check --lib --no-default-features --features heapless
+          cargo "+$MSRV" check --lib --no-default-features --features alloc,heapless
           cargo "+$MSRV" check --lib --all-features
 
   doc:

@@ -1,46 +1,52 @@
 [package]
-name = "template-rs"
+name = "cower"
 version = "0.0.0"
 edition = "2024"
-repository = "https://github.com/al8n/template-rs"
-homepage = "https://github.com/al8n/template-rs"
-documentation = "https://docs.rs/template-rs"
-description = "A template for creating Rust open-source repo on GitHub"
+repository = "https://github.com/al8n/cower"
+documentation = "https://docs.rs/cower"
+description = "Policy-based clone-on-write pointers for no_std, with or without alloc"
 license = "MIT OR Apache-2.0"
-rust-version = "1.85"
-readme = "README.md"
-keywords = ["template"]
+rust-version = "1.87"
+keywords = ["cow", "borrow", "no-std", "no-alloc"]
 categories = ["no-std", "no-std::no-alloc"]
 exclude = ["/.github/", "/ci/", "/.codecov.yml", "/deny.toml"]
 
 # The tiers. With no feature the crate is `no_std` and allocates nothing; `alloc` adds the heap
 # types and `std` the standard library, and the two are independent: `std` does not imply `alloc`.
-# All four combinations are valid builds, and `ci.yml` builds and tests each of them. A feature
-# for an optional dependency turns that dependency on and nothing else (`x = ["dep:x"]`), and each
-# tier forwards to it weakly (`std = ["x?/std"]`, `alloc = ["x?/alloc"]`).
+# All four combinations are built and tested with and without `heapless`. The optional
+# `heapless` feature enables only the dependency; its inline storage needs neither tier.
 [features]
 default = ["std"]
 std = []
 alloc = []
+heapless = ["dep:heapless"]
 
 [dependencies]
+heapless = { version = "0.9.3", optional = true, default-features = false }
 
 [dev-dependencies]
 criterion = "0.8"
+# Custom-policy tests and doctests also run with the built-in integration disabled.
+heapless = { version = "0.9.3", default-features = false }
 
-[lints.rust]
+[lints]
+workspace = true
+
+[workspace.lints.rust]
 rust_2018_idioms = "warn"
 single_use_lifetimes = "warn"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(docsrs)'] }
 
-# Without `bench = false`, `cargo bench` also builds the lib under libtest's bench harness, which
-# is not what the `[[bench]]` target below, or `-- --test` in `perf.yml`, is for.
 [lib]
 bench = false
 
+[[example]]
+name = "inline"
+required-features = ["heapless"]
+
 [[bench]]
-path = "benches/foo.rs"
-name = "foo"
+path = "benches/cow.rs"
+name = "cow"
 harness = false
 
 [profile.bench]
