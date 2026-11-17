@@ -1,12 +1,12 @@
 [package]
 name = "cower"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 repository = "https://github.com/al8n/cower"
 documentation = "https://docs.rs/cower"
 description = "Policy-based clone-on-write pointers for no_std, with or without alloc"
 license = "MIT OR Apache-2.0"
-rust-version = "1.95"
+rust-version = "1.85"
 keywords = ["cow", "borrow", "cervien", "nostd-cow"]
 categories = ["no-std", "no-std::no-alloc"]
 exclude = ["/.github/", "/ci/", "/.codecov.yml", "/deny.toml"]
