@@ -8,7 +8,7 @@ extern crate alloc;
 use cower::{Cow, CowRepr, StaticPolicy};
 
 #[path = "support/const_policies.rs"]
-mod policies;
+pub mod policies;
 
 pub static DEFAULT: Cow<'static, str> = Cow::<str>::from_static("hé🦀");
 pub static STATIC_BORROWED: Cow<'static, str, StaticPolicy> =
@@ -44,7 +44,9 @@ const fn assert_bytes(actual: &[u8], expected: &[u8]) {
   }
 }
 
-const _: () = {
+// Public, named assertions keep their helpers reachable to dead-code analysis
+// on the older MSRV compilers, including when this is a downstream library.
+pub const STATIC_ACCESS: () = {
   const BORROWED_TEXT: &str = STATIC_BORROWED.as_str();
   const OWNED_TEXT: &str = STATIC_OWNED.as_str();
   const THROUGH_FN: &str = read_static(&STATIC_BORROWED);
@@ -86,7 +88,7 @@ pub fn read_default_bytes<'s>(value: &'s Cow<'_, str>) -> &'s [u8] {
 }
 
 #[cfg(not(any(feature = "std", feature = "alloc")))]
-const _: () = {
+pub const DEFAULT_ACCESS: () = {
   static OWNED: Cow<'static, str> = Cow::Owned("owned🦀");
   const BORROWED_TEXT: &str = DEFAULT.as_str();
   const OWNED_TEXT: &str = OWNED.as_str();
@@ -107,7 +109,7 @@ const _: () = {
 
 #[cfg(any(feature = "std", feature = "alloc"))]
 #[rustversion::since(1.87)]
-const _: () = {
+pub const DEFAULT_ACCESS: () = {
   static EMPTY: Cow<'static, str> = Cow::Owned(alloc::string::String::new());
   const BORROWED_TEXT: &str = DEFAULT.as_str();
   const OWNED_TEXT: &str = EMPTY.as_str();
@@ -218,7 +220,7 @@ fn static_constructors_preserve_borrows() {
 
 #[test]
 fn short_lived_borrows_remain_supported() {
-  let bytes = [b'h', b'i'];
+  let bytes = *b"hi";
   let text = core::str::from_utf8(&bytes).unwrap();
   let default: Cow<'_, str> = Cow::borrowed(text);
   let static_policy: Cow<'_, str, StaticPolicy> = Cow::borrowed(text);

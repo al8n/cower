@@ -65,7 +65,7 @@ impl ToOwned<DifferentOwned> for str {
   type Owned = OpaqueOwned;
   type Storage<'a> = CowRepr<'a, str, DifferentOwned>;
 }
-const _: () = {
+pub const DIFFERENT_OWNED_CONSTRUCTION: () = {
   static VALUE: Cow<'static, str, DifferentOwned> = from_static::<str, DifferentOwned>("borrowed");
   match VALUE.as_storage() {
     CowRepr::Borrowed(value) => super::assert_text(value, "borrowed"),
@@ -84,7 +84,7 @@ static OWNED_ITEMS: Cow<'static, [Item], Custom> =
 static EMPTY: Cow<'static, [Item], Custom> = from_static::<[Item], Custom>(&[]);
 static ZST: Cow<'static, [()], Custom> = from_static::<[()], Custom>(&[(), (), ()]);
 
-const _: () = {
+pub const CUSTOM_STATIC_ACCESS: () = {
   const TEXT_REF: &str = TEXT.as_str();
   const UTF8_REF: &[u8] = TEXT.as_bytes();
   const BYTE_REF: &[u8] = BYTES.as_bytes();
@@ -106,7 +106,7 @@ const _: () = {
 };
 
 #[cfg(not(any(feature = "std", feature = "alloc")))]
-const _: () = {
+pub const DEFAULT_SLICE_ACCESS: () = {
   static DEFAULT: Cow<'static, [Item]> = Cow::<[Item]>::from_static(&[Item(256)]);
   static OWNED: Cow<'static, [Item]> = Cow::<[Item]>::Owned(&[Item(513)]);
   static OWNED_BYTES: Cow<'static, [u8]> = Cow::<[u8]>::Owned(b"owned");
@@ -158,7 +158,7 @@ fn wrapper_retains_storage_layout_and_marker_auto_traits() {
 }
 
 #[cfg(any(feature = "std", feature = "alloc"))]
-mod heap {
+pub mod heap {
   use super::*;
   use alloc::{
     borrow::{Cow as StdCow, ToOwned as StdToOwned},
@@ -225,16 +225,18 @@ mod heap {
   static ITEMS: Cow<'static, [u16], CustomHeap> = from_static::<[u16], CustomHeap>(&[256, 513]);
 
   // Also check ordinary method availability on the 1.85/1.86 fixture lanes.
-  const _: for<'s> fn(&'s Cow<'static, str, CustomHeap>) -> &'s str = text::<CustomHeap>;
-  const _: for<'s> fn(&'s Cow<'static, str, CustomHeap>) -> &'s [u8] = utf8::<CustomHeap>;
-  const _: for<'s> fn(&'s Cow<'static, [u8], CustomHeap>) -> &'s [u8] = bytes::<CustomHeap>;
-  const _: for<'s> fn(&'s Cow<'static, [u16], CustomHeap>) -> &'s [u16] = slice::<u16, CustomHeap>;
-  const _: &Cow<'static, str, CustomHeap> = &TEXT;
-  const _: &Cow<'static, [u8], CustomHeap> = &BYTES;
-  const _: &Cow<'static, [u16], CustomHeap> = &ITEMS;
+  pub const METHOD_SIGNATURES: () = {
+    let _: for<'s> fn(&'s Cow<'static, str, CustomHeap>) -> &'s str = text::<CustomHeap>;
+    let _: for<'s> fn(&'s Cow<'static, str, CustomHeap>) -> &'s [u8] = utf8::<CustomHeap>;
+    let _: for<'s> fn(&'s Cow<'static, [u8], CustomHeap>) -> &'s [u8] = bytes::<CustomHeap>;
+    let _: for<'s> fn(&'s Cow<'static, [u16], CustomHeap>) -> &'s [u16] = slice::<u16, CustomHeap>;
+    let _: &Cow<'static, str, CustomHeap> = &TEXT;
+    let _: &Cow<'static, [u8], CustomHeap> = &BYTES;
+    let _: &Cow<'static, [u16], CustomHeap> = &ITEMS;
+  };
 
   #[rustversion::since(1.87)]
-  const _: () = {
+  pub const HEAP_ACCESS: () = {
     static EMPTY: Cow<'static, [u16], CustomHeap> = Cow::from_std(StdCow::Owned(Vec::new()));
     static EMPTY_TEXT: Cow<'static, str, CustomHeap> = Cow::from_std(StdCow::Owned(String::new()));
     static DEFAULT: Cow<'static, [u16]> = Cow::<[u16]>::from_static(&[256, 513]);
