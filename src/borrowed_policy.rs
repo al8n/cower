@@ -55,22 +55,6 @@ impl<'a, T: ?Sized> CowStorage<'a, T, BorrowedPolicy> for &'a T {
   }
 }
 
-impl<'a, T: ?Sized> Cow<'a, T, BorrowedPolicy> {
-  /// Wraps the original shared reference, including in const contexts.
-  #[inline]
-  pub const fn from_ref(value: &'a T) -> Self {
-    Self::from_storage(value)
-  }
-}
-
-impl<T: ?Sized> Cow<'static, T, BorrowedPolicy> {
-  /// Wraps a static reference, including in const contexts.
-  #[inline]
-  pub const fn from_static(value: &'static T) -> Self {
-    Self::from_ref(value)
-  }
-}
-
 impl<'a> Cow<'a, str, BorrowedPolicy> {
   /// Returns the original string with its source lifetime.
   #[inline]

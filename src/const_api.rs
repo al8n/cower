@@ -2,6 +2,28 @@
 
 use crate::{CowRepr, ToOwned, cow::CowWithStorage};
 
+impl<'a, T, P: ?Sized> CowWithStorage<'a, T, P, &'a T>
+where
+  T: ?Sized + ToOwned<P, Storage<'a> = &'a T>,
+{
+  /// Wraps the original shared reference, including in const contexts.
+  #[inline]
+  pub const fn from_ref(value: &'a T) -> Self {
+    Self::from_storage(value)
+  }
+}
+
+impl<T, P: ?Sized> CowWithStorage<'static, T, P, &'static T>
+where
+  T: ?Sized + ToOwned<P, Storage<'static> = &'static T>,
+{
+  /// Wraps a static reference, including in const contexts.
+  #[inline]
+  pub const fn from_static(value: &'static T) -> Self {
+    Self::from_ref(value)
+  }
+}
+
 #[cfg(any(feature = "std", feature = "alloc"))]
 impl<'a, T, P: ?Sized> CowWithStorage<'a, T, P, std::borrow::Cow<'a, T>>
 where
