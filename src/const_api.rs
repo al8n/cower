@@ -3,6 +3,31 @@
 use crate::{CowRepr, ToOwned, cow::CowWithStorage};
 
 #[cfg(any(feature = "std", feature = "alloc"))]
+impl<'a, T, P: ?Sized> CowWithStorage<'a, T, P, std::borrow::Cow<'a, T>>
+where
+  T: ?Sized
+    + std::borrow::ToOwned
+    + ToOwned<P, Owned = <T as std::borrow::ToOwned>::Owned, Storage<'a> = std::borrow::Cow<'a, T>>,
+{
+  /// Borrows a value for its original lifetime, including in const contexts.
+  #[inline]
+  pub const fn from_ref(value: &'a T) -> Self {
+    Self::from_storage(std::borrow::Cow::Borrowed(value))
+  }
+}
+
+impl<'a, T, P: ?Sized> CowWithStorage<'a, T, P, CowRepr<'a, T, P>>
+where
+  T: ?Sized + ToOwned<P, Storage<'a> = CowRepr<'a, T, P>>,
+{
+  /// Borrows a value for its original lifetime, including in const contexts.
+  #[inline]
+  pub const fn from_ref(value: &'a T) -> Self {
+    Self::from_storage(CowRepr::Borrowed(value))
+  }
+}
+
+#[cfg(any(feature = "std", feature = "alloc"))]
 impl<T, P: ?Sized> CowWithStorage<'static, T, P, std::borrow::Cow<'static, T>>
 where
   T: ?Sized
@@ -34,7 +59,7 @@ where
   /// ```
   #[inline]
   pub const fn from_static(value: &'static T) -> Self {
-    Self::from_storage(std::borrow::Cow::Borrowed(value))
+    Self::from_ref(value)
   }
 }
 
@@ -59,7 +84,7 @@ where
   /// ```
   #[inline]
   pub const fn from_static(value: &'static T) -> Self {
-    Self::from_storage(CowRepr::Borrowed(value))
+    Self::from_ref(value)
   }
 }
 

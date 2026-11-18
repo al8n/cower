@@ -1,6 +1,32 @@
 use cower::{Cow, CowRepr};
 
 #[test]
+fn borrowed_policy_preserves_slice_identity_and_layout() {
+  use core::mem::{align_of, size_of};
+  use cower::BorrowedPolicy;
+
+  struct Item<'a>(&'a u8);
+  type Items<'a> = Cow<'a, [Item<'a>], BorrowedPolicy>;
+  fn new<'a>(values: impl Into<Items<'a>>) -> Items<'a> {
+    values.into()
+  }
+  let number = 7;
+  let items = [Item(&number)];
+  let (by_value, by_ref): (&[Item<'_>], &[Item<'_>]) = {
+    let value = new(&items);
+    let copy = value;
+    let cloned: Items<'_> = (&value).into();
+    assert!(matches!(cloned.into_repr(), CowRepr::Borrowed(_)));
+    (copy.into(), (&value).into())
+  };
+  assert!(core::ptr::eq(by_value, &items[..]));
+  assert!(core::ptr::eq(by_ref, by_value));
+  assert_eq!(*by_ref[0].0, 7);
+  assert_eq!(size_of::<Items<'_>>(), size_of::<&[Item<'_>]>());
+  assert_eq!(align_of::<Items<'_>>(), align_of::<&[Item<'_>]>());
+}
+
+#[test]
 fn default_and_array_borrows_work_in_every_tier() {
   let text: Cow<'_, str> = Cow::default();
   assert!(text.is_owned());

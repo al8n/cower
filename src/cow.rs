@@ -234,6 +234,16 @@ impl<'a, T: ?Sized + ToOwned<P>, P: ?Sized> From<&'a T> for Cow<'a, T, P> {
     Self::borrowed(value)
   }
 }
+/// Clones the storage, retaining the lifetime of the original contents.
+impl<'a, T: ?Sized + ToOwned<P>, P: ?Sized> From<&Self> for Cow<'a, T, P>
+where
+  T::Storage<'a>: Clone,
+{
+  #[inline]
+  fn from(value: &Self) -> Self {
+    Self::clone(value)
+  }
+}
 impl<'a, T: ?Sized + ToOwned<P>, P: ?Sized> Clone for Cow<'a, T, P>
 where
   T::Storage<'a>: Clone,

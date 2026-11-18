@@ -5,10 +5,29 @@
 #[cfg(any(feature = "std", feature = "alloc"))]
 extern crate alloc;
 
-use cower::{Cow, CowRepr, StaticPolicy};
+use cower::{BorrowedPolicy, Cow, CowRepr, StaticPolicy};
 
 #[path = "support/const_policies.rs"]
 pub mod policies;
+
+// Model a downstream slice wrapper whose no-alloc representation must accept
+// elements containing local references and return the original slice lifetime.
+pub const fn borrowed_slice<'a, T>(value: &Cow<'a, [T], BorrowedPolicy>) -> &'a [T] {
+  value.as_slice()
+}
+
+pub const BORROWED_POLICY_ACCESS: () = {
+  let number = 42;
+  let items = [&number];
+  let slice = borrowed_slice(&Cow::<[_], BorrowedPolicy>::from_ref(&items));
+  assert!(*slice[0] == 42);
+  let text = Cow::<str, BorrowedPolicy>::from_static("é");
+  assert_text(text.as_str(), "é");
+  assert_bytes(text.as_bytes(), b"\xc3\xa9");
+  let bytes = *b"local";
+  let value = Cow::<[u8], BorrowedPolicy>::from_ref(&bytes);
+  assert_bytes(value.as_bytes(), value.into_storage());
+};
 
 pub static DEFAULT: Cow<'static, str> = Cow::<str>::from_static("hé🦀");
 pub static STATIC_BORROWED: Cow<'static, str, StaticPolicy> =
