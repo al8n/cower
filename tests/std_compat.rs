@@ -1,6 +1,41 @@
 use cower::{Cow, CowRepr};
 
 #[test]
+fn borrowed_policy_string_views_retain_the_original_borrow() {
+  use core::ptr;
+  use cower::{BorrowedPolicy, CowStorage};
+
+  let utf8 = [b'a', 0xc3, 0xa9];
+  let source = core::str::from_utf8(&utf8).unwrap();
+  let (by_ref, by_value): (&str, &str) = {
+    let mut text = Cow::<str, BorrowedPolicy>::from_ref(source);
+    assert!(ptr::eq(text.as_borrowed().unwrap(), source));
+    assert!(text.as_owned().is_none());
+    assert!(CowStorage::as_owned_mut(text.as_storage_mut()).is_none());
+    assert!(ptr::eq(text.as_str(), source));
+    assert!(ptr::eq(text.as_bytes(), &utf8[..]));
+    ((&text).into(), text.into())
+  };
+  assert!(ptr::eq(by_ref, source));
+  assert!(ptr::eq(by_value, source));
+}
+
+#[test]
+fn static_constructors_preserve_the_input_slice_for_each_backing() {
+  use core::ptr;
+  use cower::{BorrowedPolicy, StaticPolicy};
+
+  static INPUT: [u8; 3] = [0, 1, 255];
+  let reference = Cow::<[u8], BorrowedPolicy>::from_static(&INPUT);
+  let repr = Cow::<[u8], StaticPolicy>::from_static(&INPUT);
+  let default = Cow::<[u8]>::from_static(&INPUT);
+  assert!(ptr::eq(reference.as_bytes(), &INPUT[..]));
+  for value in [repr.as_borrowed(), default.as_borrowed()] {
+    assert!(ptr::eq(value.unwrap(), &INPUT[..]));
+  }
+}
+
+#[test]
 fn borrowed_policy_preserves_slice_identity_and_layout() {
   use core::mem::{align_of, size_of};
   use cower::BorrowedPolicy;
