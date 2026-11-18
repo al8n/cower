@@ -72,6 +72,11 @@ Policies using `CowRepr` or fixed-capacity storage can use `borrow_std()` for a
 borrowed standard value instead. Value conversions through `From` also work when
 the owned types match, regardless of the backing enum.
 
+For a function taking `impl Into<StdCow<'a, T>>`, passing `&value` preserves
+the original borrow or copies owned contents using the standard `ToOwned`.
+The result can outlive the wrapper. Converting `&value` to another cower
+`Cow` with the same policy clones that policy's storage.
+
 ## Const construction and content access
 
 `from_static` constructs a borrowed `Cow` from `&'static T` without cloning or
@@ -127,8 +132,10 @@ With standard `Cow` backing, these methods are const on Rust **1.87+**, matching
 methods. With `CowRepr` backing and static-reference owned storage, they are const
 on Rust **1.85**, including core-only `DefaultPolicy`, `StaticPolicy`, and custom
 policies. Static-reference slice access does not require `T: Clone`. Other owned
-containers do not automatically gain const accessors. Every returned reference
-borrows `self` and cannot outlive owned storage.
+containers do not automatically gain const accessors. These accessors borrow
+`self` so a view into owned storage cannot outlive its owner. With
+`BorrowedPolicy`, the storage is the source reference itself and the view
+retains its original lifetime.
 
 ```rust
 // Custom policy: works without std or alloc, on Rust 1.85.
@@ -169,6 +176,7 @@ assert_eq!(UTF8, b"hello");
 | `DefaultPolicy`, `[T]` | `Vec<T>` (`T: Clone`) | `&'static [T]` (`T: 'static`) |
 | `DefaultPolicy`, other types | Standard `ToOwned::Owned` | No built-in mapping |
 | `StaticPolicy`, any `T: ?Sized + 'static` | `&'static T` | `&'static T` |
+| `BorrowedPolicy`, any `T: ?Sized` | Borrow only (`&'a T`) | Borrow only (`&'a T`) |
 | `Heapless<N>`, `str` (feature `heapless`) | `heapless::String<N>` | `heapless::String<N>` |
 | `Heapless<N>`, `[T]` (feature `heapless`) | `heapless::Vec<T, N>` | `heapless::Vec<T, N>` |
 | User-defined policy | User-defined storage | User-defined storage |
@@ -176,6 +184,25 @@ assert_eq!(UTF8, b"hello");
 `DefaultPolicy` uses a blanket implementation only with `std` or `alloc`.
 Without either feature, its built-in implementations cover only `str` and `[T]`.
 `StaticPolicy` always provides blanket static-reference storage.
+
+`BorrowedPolicy` stores exactly one shared reference and is always `Copy`.
+For a feature-aware slice wrapper, select `Cow<'a, [T], BorrowedPolicy>`
+in the core-only build and `Cow<'a, [T]>` with alloc or std. Both support
+const construction with `from_ref` on Rust 1.85. With `BorrowedPolicy`,
+`as_slice()` returns the original `&'a [T]`, even after the wrapper goes
+out of scope. Elements can themselves borrow local data.
+
+```rust
+use cower::{BorrowedPolicy, Cow};
+
+type OneOf<'a, T> = Cow<'a, [T], BorrowedPolicy>;
+const fn wrap<T>(items: &[T]) -> OneOf<'_, T> { OneOf::from_ref(items) }
+
+let local = 42;
+let items = [&local];
+let slice = wrap(&items).as_slice();
+assert!(core::ptr::eq(slice, &items[..]));
+```
 
 The built-in policies are uninhabited enums used only as type parameters. They
 have no constructors or `Default` implementations, and `Cow` stores no policy
@@ -199,7 +226,7 @@ Enable the optional `heapless` feature to use `Heapless<N>`. It works without
 
 ```toml
 [dependencies]
-cower = { version = "0.1.2", default-features = false, features = ["heapless"] }
+cower = { version = "0.1.3", default-features = false, features = ["heapless"] }
 ```
 
 ```rust,ignore

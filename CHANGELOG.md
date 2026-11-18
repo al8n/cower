@@ -9,6 +9,13 @@ request, and `release.yml` publishes the released section as the GitHub Release 
 
 ## Unreleased
 
+## 0.1.3 (2026-11-18)
+
+- Add `BorrowedPolicy` for reference-sized, copyable borrows of any lifetime.
+  Add const `from_ref` for reference, standard Cow, and CowRepr storage.
+- Convert a shared reference to a cower Cow into a cower or standard Cow
+  value, preserving the original borrow or cloning owned contents.
+
 ## 0.1.2 (2026-11-18)
 
 - Add generic const `from_static` constructors for all policies selecting

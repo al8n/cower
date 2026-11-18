@@ -93,6 +93,18 @@ where
   }
 }
 
+/// Preserves the original borrow or clones owned contents into standard storage.
+/// The result can outlive the reference to the wrapper.
+impl<'a, T: ?Sized + StdToOwned + ToOwned<P>, P: ?Sized> From<&Cow<'a, T, P>> for StdCow<'a, T> {
+  #[inline]
+  fn from(value: &Cow<'a, T, P>) -> Self {
+    match value.as_borrowed() {
+      Some(borrowed) => Self::Borrowed(borrowed),
+      None => Self::Owned(StdToOwned::to_owned(value.as_ref())),
+    }
+  }
+}
+
 impl<'a, 'b, T, P: ?Sized> From<&'b Cow<'a, T, P>> for &'b StdCow<'a, T>
 where
   T:

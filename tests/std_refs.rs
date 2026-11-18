@@ -71,6 +71,28 @@ fn owned_round_trips_preserve_allocation_and_capacity() {
 }
 
 #[test]
+fn converting_a_reference_preserves_the_variant_and_source_lifetime() {
+  fn convert<'a>(value: &Cow<'a, str>) -> StdCow<'a, str> {
+    value.into()
+  }
+
+  let source = String::from("local");
+  let borrowed = {
+    let value = Cow::<str>::from_ref(&source);
+    convert(&value)
+  };
+  assert!(matches!(borrowed, StdCow::Borrowed(s) if core::ptr::eq(s, source.as_str())));
+
+  let mut value = Cow::<[u8]>::from(vec![1, 2]);
+  let standard: StdCow<'static, [u8]> = (&value).into();
+  let wrapped: Cow<'static, [u8]> = (&value).into();
+  value.to_mut()[0] = 3;
+  assert!(matches!(standard, StdCow::Owned(ref v) if v == &[1, 2]));
+  assert!(wrapped.is_owned());
+  assert_eq!(wrapped.as_slice(), &[1, 2]);
+}
+
+#[test]
 fn custom_policy_can_explicitly_choose_standard_backing() {
   struct Heap;
   impl ToOwned<Heap> for str {
