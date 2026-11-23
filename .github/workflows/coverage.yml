@@ -103,7 +103,7 @@ jobs:
           fi
           echo "ok: lcov.info is $(wc -c < lcov.info) bytes"
       - name: Retain coverage reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: |
